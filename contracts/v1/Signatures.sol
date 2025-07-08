@@ -22,9 +22,6 @@ contract Signatures {
     string private constant _NAME = "PaymentIntentHandlerV1";
     string private constant _VERSION = "1";
 
-    mapping(address => uint256) public nonces;
-    uint256[50] private _gap;
-
     constructor() {
         (
             _EIP_712_DOMAIN_TYPEHASH,

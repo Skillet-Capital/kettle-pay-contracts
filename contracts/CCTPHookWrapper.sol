@@ -6,6 +6,8 @@ import {TypedMemView} from "../lib/evm-cctp-contracts/lib/memview-sol/contracts/
 import {MessageV2} from "../lib/evm-cctp-contracts/src/messages/v2/MessageV2.sol";
 import {BurnMessageV2} from "../lib/evm-cctp-contracts/src/messages/v2/BurnMessageV2.sol";
 import {Ownable2Step} from "../lib/evm-cctp-contracts/src/roles/Ownable2Step.sol";
+import {AccessControl} from "../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 import {IPaymentHook} from "./interfaces/IPaymentHook.sol";
 
@@ -15,7 +17,7 @@ import {IPaymentHook} from "./interfaces/IPaymentHook.sol";
  * optionally executes the hook contained in the Burn Message.
  * @dev Intended to only work with CCTP v2 message formats and interfaces.
  */
-contract CCTPHookWrapper is Ownable2Step {
+contract CCTPHookWrapper is AccessControl, ReentrancyGuard {
     struct BurnMessageFields {
         uint32 version;
         bytes32 burnToken;
@@ -37,21 +39,34 @@ contract CCTPHookWrapper is Ownable2Step {
     // The supported Message Body version
     uint32 public constant SUPPORTED_MESSAGE_BODY_VERSION = 1;
 
+    // setup the relayer role
+    bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
+
     // ============ Libraries ============
     using TypedMemView for bytes;
     using TypedMemView for bytes29;
+
+    event CCTPHookExecuted(
+        bytes32 indexed nonce,
+        address indexed hookTarget,
+        bool success,
+        bytes returnData
+    );
 
     // ============ Constructor ============
     /**
      * @param _messageTransmitter The address of the local message transmitter
      */
-    constructor(address _messageTransmitter) Ownable2Step() {
+    constructor(address _messageTransmitter) {
         require(
             _messageTransmitter != address(0),
             "Message transmitter is the zero"
         );
 
         MESSAGE_TRANSMITTER = IReceiverV2(_messageTransmitter);
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(RELAYER_ROLE, msg.sender);
     }
 
     // ============ External Functions  ============
@@ -85,6 +100,8 @@ contract CCTPHookWrapper is Ownable2Step {
     )
         external
         virtual
+        nonReentrant
+        onlyRelayer
         returns (
             bool relaySuccess,
             bool hookSuccess,
@@ -112,6 +129,9 @@ contract CCTPHookWrapper is Ownable2Step {
         relaySuccess = MESSAGE_TRANSMITTER.receiveMessage(message, attestation);
         require(relaySuccess, "Receive message failed");
 
+        // Extract message nonce
+        bytes32 _nonce = MessageV2._getNonce(_msg);
+
         // Handle hook if present
         bytes29 _hookData = BurnMessageV2._getHookData(_msgBody);
 
@@ -124,6 +144,7 @@ contract CCTPHookWrapper is Ownable2Step {
 
             bytes memory callData = abi.encodeWithSelector(
                 IPaymentHook.executeHook.selector,
+                _nonce,
                 fields.version,
                 fields.burnToken,
                 fields.mintRecipient,
@@ -138,6 +159,13 @@ contract CCTPHookWrapper is Ownable2Step {
             (hookSuccess, hookReturnData) = _executeHook(
                 address(uint160(uint256(fields.mintRecipient))),
                 callData
+            );
+
+            emit CCTPHookExecuted(
+                _nonce,
+                address(uint160(uint256(fields.mintRecipient))),
+                hookSuccess,
+                hookReturnData
             );
         }
     }
@@ -170,5 +198,10 @@ contract CCTPHookWrapper is Ownable2Step {
         fields.maxFee = BurnMessageV2._getMaxFee(_msgBody);
         fields.feeExecuted = BurnMessageV2._getFeeExecuted(_msgBody);
         fields.expirationBlock = BurnMessageV2._getExpirationBlock(_msgBody);
+    }
+
+    modifier onlyRelayer() {
+        require(hasRole(RELAYER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Only relayer or admin");
+        _;
     }
 }

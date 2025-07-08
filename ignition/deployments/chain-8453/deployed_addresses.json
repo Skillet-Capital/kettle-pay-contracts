@@ -1,4 +1,4 @@
 {
-  "PeerPayment#CCTPHookWrapper": "0x8C5297782B72d9b0F8e033615c7610FA8378B281",
-  "PeerPayment#PaymentIntentHandler": "0xCf7f42766A6eCB33C7ec4FF56b546137f379f839"
+  "CCTPHookWrapper#CCTPHookWrapper": "0x16d99eA6b78D987a1B7DD464588A60ef41E5b8c7",
+  "PaymentIntentHandlerV1#PaymentIntentHandlerV1": "0x4b6CE2841B9be7aF2F472A9a0f0b0aFa338dD859"
 }

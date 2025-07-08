@@ -2,8 +2,16 @@
 pragma solidity ^0.7.6;
 
 interface IPaymentHook {
-  
+    /// @notice Executes the payment intent hook
+    /// @param _nonce The nonce of the cctp burn message
+    /// @param _version The version of the cctp burn message
+    /// @param _burnToken The token that was burned
+    /// @param _mintRecipient The address that received the mint
+    /// @param _amount The amount of the payment intent
+    /// @param _messageSender The address that sent the message
+    /// @param _maxFee The maximum fee that was executed
     function executeHook(
+      bytes32 _nonce,
       uint32 _version,
       bytes32 _burnToken,
       bytes32 _mintRecipient,
@@ -14,17 +22,4 @@ interface IPaymentHook {
       uint256 _expirationBlock,
       bytes calldata _structData
     ) external returns (bool);
-
-    event CCTPHookExecuted(
-        uint256 indexed executionId,
-        uint32 version,
-        bytes32 burnToken,
-        bytes32 mintRecipient,
-        uint256 amount,
-        bytes32 messageSender,
-        uint256 maxFee,
-        uint256 feeExecuted,
-        uint256 expirationBlock,
-        bytes structData
-    );
 }

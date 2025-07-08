@@ -5,8 +5,7 @@ import {
 import { expect } from "chai";
 import hre from "hardhat";
 import { encodeAbiParameters, getAddress, parseAbiParameters, parseGwei, parseUnits, zeroAddress } from "viem";
-import { signTypedData } from "viem/accounts";
-import { ZERO_BYTES32 } from "../lib/evm-cctp-contracts/lib/centre-tokens.git/test/helpers/constants";
+import { randomBytes } from "crypto";
 
 type PaymentIntentStruct = {
   amount: bigint;
@@ -20,24 +19,9 @@ function padAddress(address: `0x${string}`): `0x${string}` {
   return `0x${address.replace(/^0x/, "").padStart(64, "0")}` as `0x${string}`;
 }
 
-function parseCCTPHookExecutedEvent(event: any) {
-  return {
-    executionId: event.args.executionId,
-    version: event.args.version,
-    burnToken: event.args.burnToken,
-    mintRecipient: event.args.mintRecipient,
-    amount: event.args.amount,
-    messageSender: event.args.messageSender,
-    maxFee: event.args.maxFee,
-    feeExecuted: event.args.feeExecuted,
-    expirationBlock: event.args.expirationBlock,
-    structData: event.args.structData,
-  };
-}
-
 function parsePaymentIntentSuccessEvent(event: any) {
   return {
-    executionId: event.args.executionId,
+    nonce: event.args.nonce,
     merchant: event.args.merchant,
     amount: event.args.amount,
     feeBps: event.args.feeBps,
@@ -48,9 +32,13 @@ function parsePaymentIntentSuccessEvent(event: any) {
 
 function parsePaymentIntentFailedEvent(event: any) {
   return {
-    executionId: event.args.executionId,
+    nonce: event.args.nonce,
     reason: event.args.reason,
   };
+}
+
+function randomBytes32(): `0x${string}` {
+  return `0x${randomBytes(32).toString("hex")}`;
 }
 
 describe("PaymentIntentHandlerV1", function () {
@@ -151,6 +139,7 @@ describe("PaymentIntentHandlerV1", function () {
       );
 
       const hash = await paymentIntentHandler.write.executeHook([
+        randomBytes32(),
         1,
         padAddress(usdc.address),
         padAddress(paymentIntentHandler.address),
@@ -164,15 +153,12 @@ describe("PaymentIntentHandlerV1", function () {
 
       await publicClient.waitForTransactionReceipt({ hash });
 
-      const CCTPHookExecutedEvents = await paymentIntentHandler.getEvents.CCTPHookExecuted();
-      expect(CCTPHookExecutedEvents).to.have.lengthOf(1);
-      console.log(parseCCTPHookExecutedEvent(CCTPHookExecutedEvents[0]));
-
       const PaymentIntentSuccessEvents = await paymentIntentHandler.getEvents.PaymentIntentSuccess();
       expect(PaymentIntentSuccessEvents).to.have.lengthOf(1);
       console.log(parsePaymentIntentSuccessEvent(PaymentIntentSuccessEvents[0]));
 
       const rejected = await paymentIntentHandler.write.executeHook([
+        randomBytes32(),
         1,
         padAddress(usdc.address),
         padAddress(paymentIntentHandler.address),
@@ -232,6 +218,7 @@ describe("PaymentIntentHandlerV1", function () {
       );
 
       const rejected = await paymentIntentHandler.write.executeHook([
+        randomBytes32(),
         1,
         padAddress(usdc.address),
         padAddress(paymentIntentHandler.address),
@@ -244,15 +231,10 @@ describe("PaymentIntentHandlerV1", function () {
       ]);
       await publicClient.waitForTransactionReceipt({ hash: rejected });
 
-      const CCTPHookExecutedEvents = await paymentIntentHandler.getEvents.CCTPHookExecuted();
-      expect(CCTPHookExecutedEvents).to.have.lengthOf(1);
-      const cctpHookExecutedEvent = parseCCTPHookExecutedEvent(CCTPHookExecutedEvents[0]);
-
       const PaymentIntentFailedEvents = await paymentIntentHandler.getEvents.PaymentIntentFailed();
       expect(PaymentIntentFailedEvents).to.have.lengthOf(1);
 
       const failureEvent = parsePaymentIntentFailedEvent(PaymentIntentFailedEvents[0]);
-      expect(failureEvent.executionId).to.equal(cctpHookExecutedEvent.executionId);
       expect(failureEvent.reason).to.equal("InvalidVParameter");
 
       // make sure the salt is not logged as used yet
@@ -295,6 +277,7 @@ describe("PaymentIntentHandlerV1", function () {
       );
 
       const rejected2 = await paymentIntentHandler.write.executeHook([
+        randomBytes32(),
         1,
         padAddress(usdc.address),
         padAddress(paymentIntentHandler.address),
@@ -308,15 +291,10 @@ describe("PaymentIntentHandlerV1", function () {
 
       await publicClient.waitForTransactionReceipt({ hash: rejected2 });
 
-      const CCTPHookExecutedEvents2 = await paymentIntentHandler.getEvents.CCTPHookExecuted();
-      expect(CCTPHookExecutedEvents2).to.have.lengthOf(1);
-      const cctpHookExecutedEvent2 = parseCCTPHookExecutedEvent(CCTPHookExecutedEvents2[0]);
-
       const PaymentIntentFailedEvents2 = await paymentIntentHandler.getEvents.PaymentIntentFailed();
       expect(PaymentIntentFailedEvents2).to.have.lengthOf(1);
 
       const failureEvent2 = parsePaymentIntentFailedEvent(PaymentIntentFailedEvents2[0]);
-      expect(failureEvent2.executionId).to.equal(cctpHookExecutedEvent2.executionId);
       expect(failureEvent2.reason).to.equal("InvalidSignature");
 
       // make sure the salt is not logged as used

@@ -2,113 +2,103 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import {Ownable} from "../../lib/evm-cctp-contracts/src/roles/Ownable.sol";
 import {SafeERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
 import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
 import {Signatures} from "./Signatures.sol";
 import {PaymentIntentHookData} from "./Structs.sol";
 import {ReentrancyGuard} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-
-/// @notice Minimal USDC interface for transfer
-interface IERC20 {
-    function transfer(
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-    function balanceOf(address account) external view returns (uint256);
-    function transferFrom(
-        address sender,
-        address recipient,
-        uint256 amount
-    ) external returns (bool);
-}
+import {AccessControl} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
+import {SafeMath} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/math/SafeMath.sol";
+import {IERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Payment intent processor for Circle CCTP V2
-contract PaymentIntentHandlerV1 is Ownable, IPaymentHook, Signatures, ReentrancyGuard {
+contract PaymentIntentHandlerV1 is
+    IPaymentHook,
+    Signatures,
+    ReentrancyGuard,
+    AccessControl
+{
     using SafeERC20 for IERC20;
+    using SafeMath for uint256;
+
+    bytes32 public constant RECOVER_ROLE = keccak256("RECOVER_ROLE");
 
     /// @notice Tracks used salts to prevent replays
     mapping(uint256 => bool) public salts;
+    mapping(bytes32 => uint256) public receivedMints;
 
     /// @notice USDC token address on this chain
     address public usdc;
 
-    /// @notice Tracks cctp hook executions
-    uint256 public cctpHookExecutionCount;
+    /// @notice The address of the CCTP hook wrapper
+    address public hookWrapper;
 
     event PaymentIntentSuccess(
-        uint256 indexed executionId,
+        bytes32 indexed nonce,
         address indexed merchant,
         uint256 amount,
+        uint256 feeExecuted,
+        uint256 netMinted,
+        uint256 netPayable,
+        uint256 netFee,
         uint256 feeBps,
         address feeRecipient,
         uint256 salt
     );
 
-    event PaymentIntentFailed(
-        uint256 indexed executionId,
-        string reason
-    );
+    event PaymentIntentFailed(bytes32 indexed nonce, string reason);
 
     /// @notice Emitted when emergency recovery is executed
     event EmergencyRecovery(address to, uint256 amount);
 
     /// @notice Initializes the contract with the USDC and Circle Messenger addresses
-    constructor(address _usdc, address _owner) Ownable() Signatures() {
-        usdc = _usdc;
+    constructor(address _usdc, address _hookWrapper) Signatures() {
+        require(_usdc != address(0), "Invalid USDC address");
+        require(_hookWrapper != address(0), "Invalid hook wrapper address");
 
-        _transferOwnership(_owner);
+        usdc = _usdc;
+        hookWrapper = _hookWrapper;
+
+        _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(RECOVER_ROLE, msg.sender);
     }
 
+    /// @inheritdoc IPaymentHook
     function executeHook(
-        uint32 _version,
-        bytes32 _burnToken,
-        bytes32 _mintRecipient,
+        bytes32 _nonce,
+        uint32 /* _version */,
+        bytes32 /* _burnToken */,
+        bytes32 /* _mintRecipient */,
         uint256 _amount,
-        bytes32 _messageSender,
-        uint256 _maxFee,
+        bytes32 /* _messageSender */,
+        uint256 /* _maxFee */,
         uint256 _feeExecuted,
-        uint256 _expirationBlock,
+        uint256 /* _expirationBlock */,
         bytes calldata _structData
-    ) external override nonReentrant returns (bool) {
+    ) external override nonReentrant onlyHookWrapper returns (bool) {
 
-        // increment the cctp hook execution count
-        cctpHookExecutionCount += 1;
+        receivedMints[_nonce] = _amount - _feeExecuted;
 
-        emit CCTPHookExecuted(
-            cctpHookExecutionCount,
-            _version,
-            _burnToken,
-            _mintRecipient,
-            _amount,
-            _messageSender,
-            _maxFee,
-            _feeExecuted,
-            _expirationBlock,
-            _structData
-        );
-        
-        try this._executeHook(_amount, _feeExecuted, _structData) returns (bool result) {
+        try
+            this._executeHook(_nonce, _amount, _feeExecuted, _structData)
+        returns (bool result) {
             return result;
         } catch Error(string memory reason) {
-            emit PaymentIntentFailed(
-                cctpHookExecutionCount,
-                reason
-            );
+            emit PaymentIntentFailed(_nonce, reason);
+            return false;
         } catch {
-            emit PaymentIntentFailed(
-                cctpHookExecutionCount,
-                "Unknown error"
-            );
+            emit PaymentIntentFailed(_nonce, "Unknown error");
+            return false;
         }
     }
 
+    /// @dev External only for self-call via `this._executeHook`. Rejects all other callers.
     function _executeHook(
+        bytes32 _nonce,
         uint256 _amount,
         uint256 _feeExecuted,
         bytes calldata _structData
-    ) external returns (bool) {
-        require(msg.sender == address(this), "Only callable internally");
+    ) external onlySelf returns (bool) {
 
         PaymentIntentHookData memory _hookData = abi.decode(
             _structData,
@@ -123,21 +113,42 @@ contract PaymentIntentHandlerV1 is Ownable, IPaymentHook, Signatures, Reentrancy
         bytes32 _hash = _hashPaymentIntent(_hookData.intent);
         _verifySignature(_hash, _hookData.intent.merchant, _hookData.signature);
 
-        uint256 netMinted = _amount - _feeExecuted;
+        /**
+         * _amount - amount burned from source chain
+         * _netMinted - amount minted net of fee executed
+         * _feeExecuted - fee taken by cctp
+         * _grossFee - total fees taken out of the intent amount
+         * _netPayable - payment intent amount minus gross fee
+         * _netFee - total fees net of cctp fee takable by the protocol
+         */
+        require(_hookData.intent.amount == _amount, "Invalid amount");
 
-        uint256 grossFee = (_hookData.intent.amount * _hookData.intent.feeBps) /
-            10_000;
-        uint256 netPayable = _hookData.intent.amount - grossFee;
+        uint256 _netMinted = _amount - _feeExecuted;
 
-        uint256 netFee = netMinted - netPayable;
+        uint256 _grossFee = _hookData.intent.amount
+            .mul(_hookData.intent.feeBps)
+            .div(10_000);
 
-        IERC20(usdc).transfer(_hookData.intent.merchant, netPayable);
-        IERC20(usdc).transfer(_hookData.intent.feeRecipient, netFee);
+        // Ensure that protocol fee does not underflow when subtracting CCTP fee
+        require(_grossFee >= _feeExecuted, "Fee executed exceeds gross fee");
+
+        uint256 _netPayable = _hookData.intent.amount - _grossFee;
+        uint256 _netFee = _netMinted - _netPayable;
+
+        IERC20(usdc).safeTransfer(_hookData.intent.merchant, _netPayable);
+
+        if (_netFee > 0) {
+            IERC20(usdc).safeTransfer(_hookData.intent.feeRecipient, _netFee);
+        }
 
         emit PaymentIntentSuccess(
-            cctpHookExecutionCount,
+            _nonce,
             _hookData.intent.merchant,
             _hookData.intent.amount,
+            _feeExecuted,
+            _netMinted,
+            _netPayable,
+            _netFee,
             _hookData.intent.feeBps,
             _hookData.intent.feeRecipient,
             _hookData.intent.salt
@@ -148,9 +159,34 @@ contract PaymentIntentHandlerV1 is Ownable, IPaymentHook, Signatures, Reentrancy
 
     /// @notice Emergency function to recover stuck USDC in the contract
     /// @param to Address to receive the recovered funds
-    function emergencyRecover(address to) external onlyOwner nonReentrant {
+    function emergencyRecover(address to) external onlyRecover nonReentrant {
         uint256 balance = IERC20(usdc).balanceOf(address(this));
         require(IERC20(usdc).transfer(to, balance), "Transfer failed");
         emit EmergencyRecovery(to, balance);
+    }
+
+    /// @notice Emergency function to recover stuck USDC in the contract by nonce
+    /// @param _nonce The nonce of the cctp burn message
+    /// @param _to Address to receive the recovered funds
+    function emergencyRecoverNonceMint(bytes32 _nonce, address _to) external onlyRecover {
+        uint256 _amount = receivedMints[_nonce];
+        require(_amount > 0, "No amount received");
+        receivedMints[_nonce] = 0;
+        IERC20(usdc).safeTransfer(_to, _amount);
+    }
+
+    modifier onlyHookWrapper() {
+        require(msg.sender == hookWrapper, "Only callable by hook wrapper");
+        _;
+    }
+
+    modifier onlySelf() {
+        require(msg.sender == address(this), "Only callable by self");
+        _;
+    }
+
+    modifier onlyRecover() {
+        require(hasRole(RECOVER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Only recover or admin");
+        _;
     }
 }

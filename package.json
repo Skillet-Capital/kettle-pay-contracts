@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.0.0",
+    "ethers": "^6.15.0",
     "hardhat-dependency-compiler": "^1.2.1"
   }
 }

@@ -16,6 +16,17 @@ import {IPaymentHook} from "./interfaces/IPaymentHook.sol";
  * @dev Intended to only work with CCTP v2 message formats and interfaces.
  */
 contract CCTPHookWrapper is Ownable2Step {
+    struct BurnMessageFields {
+        uint32 version;
+        bytes32 burnToken;
+        bytes32 mintRecipient;
+        uint256 amount;
+        bytes32 messageSender;
+        uint256 maxFee;
+        uint256 feeExecuted;
+        uint256 expirationBlock;
+    }
+
     // ============ Constants ============
     // Address of the local message transmitter
     IReceiverV2 public immutable MESSAGE_TRANSMITTER;
@@ -92,7 +103,8 @@ contract CCTPHookWrapper is Ownable2Step {
         bytes29 _msgBody = MessageV2._getMessageBody(_msg);
         BurnMessageV2._validateBurnMessageFormat(_msgBody);
         require(
-            BurnMessageV2._getVersion(_msgBody) == SUPPORTED_MESSAGE_BODY_VERSION,
+            BurnMessageV2._getVersion(_msgBody) ==
+                SUPPORTED_MESSAGE_BODY_VERSION,
             "Invalid message body version"
         );
 
@@ -104,32 +116,27 @@ contract CCTPHookWrapper is Ownable2Step {
         bytes29 _hookData = BurnMessageV2._getHookData(_msgBody);
 
         if (_hookData.isValid()) {
-
             // clone struct data into memory from hook data pointer
             bytes memory _structData = _hookData.clone();
 
             // extract burn amount and fees
-            uint256 _burnAmount = BurnMessageV2._getAmount(_msgBody);
-            uint256 _feeExecuted = BurnMessageV2._getFeeExecuted(_msgBody);
-
-            // extract message sender and message recipient (implents IPaymentHook)
-            address _messageSender = address(
-                uint160(uint256(BurnMessageV2._getMessageSender(_msgBody)))
-            );
-            address _mintRecipient = address(
-                uint160(uint256(BurnMessageV2._getMintRecipient(_msgBody)))
-            );
+            BurnMessageFields memory fields = _parseBurnMessageFields(_msgBody);
 
             bytes memory callData = abi.encodeWithSelector(
                 IPaymentHook.executeHook.selector,
-                _burnAmount,
-                _feeExecuted,
-                _messageSender,
+                fields.version,
+                fields.burnToken,
+                fields.mintRecipient,
+                fields.amount,
+                fields.messageSender,
+                fields.maxFee,
+                fields.feeExecuted,
+                fields.expirationBlock,
                 _structData
             );
 
             (hookSuccess, hookReturnData) = _executeHook(
-                _mintRecipient,
+                address(uint160(uint256(fields.mintRecipient))),
                 callData
             );
         }
@@ -150,5 +157,18 @@ contract CCTPHookWrapper is Ownable2Step {
         bytes memory _hookCalldata
     ) internal virtual returns (bool _success, bytes memory _returnData) {
         (_success, _returnData) = address(_hookTarget).call(_hookCalldata);
+    }
+
+    function _parseBurnMessageFields(
+        bytes29 _msgBody
+    ) internal pure returns (BurnMessageFields memory fields) {
+        fields.version = BurnMessageV2._getVersion(_msgBody);
+        fields.burnToken = BurnMessageV2._getBurnToken(_msgBody);
+        fields.mintRecipient = BurnMessageV2._getMintRecipient(_msgBody);
+        fields.amount = BurnMessageV2._getAmount(_msgBody);
+        fields.messageSender = BurnMessageV2._getMessageSender(_msgBody);
+        fields.maxFee = BurnMessageV2._getMaxFee(_msgBody);
+        fields.feeExecuted = BurnMessageV2._getFeeExecuted(_msgBody);
+        fields.expirationBlock = BurnMessageV2._getExpirationBlock(_msgBody);
     }
 }

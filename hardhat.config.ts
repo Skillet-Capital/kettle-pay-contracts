@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "hardhat-dependency-compiler";
-import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-toolbox-viem";
+import "hardhat-tracer";
 
 import dotenv from "dotenv";
 dotenv.config();

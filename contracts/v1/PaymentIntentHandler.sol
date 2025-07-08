@@ -2,10 +2,11 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import {Ownable} from "../lib/evm-cctp-contracts/src/roles/Ownable.sol";
-import {SafeERC20} from "../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
-import {IPaymentHook} from "./interfaces/IPaymentHook.sol";
-
+import {Ownable} from "../../lib/evm-cctp-contracts/src/roles/Ownable.sol";
+import {SafeERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
+import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
+import {Signatures} from "./Signatures.sol";
+import {PaymentIntentHookData} from "./Structs.sol";
 
 /// @notice Minimal USDC interface for transfer
 interface IERC20 {
@@ -15,20 +16,11 @@ interface IERC20 {
 }
 
 /// @notice Payment intent processor for Circle CCTP V2
-contract PaymentIntentHandler is Ownable, IPaymentHook {
+contract PaymentIntentHandlerV1 is Ownable, IPaymentHook, Signatures {
     using SafeERC20 for IERC20;
 
-    /// @notice Struct describing the payment intent
-    struct PaymentIntent {
-        uint256 amount;         // Total USDC received
-        uint256 feeBps;         // Fee in basis points (1% = 100)
-        address feeRecipient;   // Address to receive the fee
-        address merchant;       // Address to receive net amount
-        uint256 salt;           // Random salt for idempotency
-    }
-
     /// @notice Tracks used salts to prevent replays
-    mapping(uint256 => bool) public usedSalts;
+    mapping(uint256 => bool) public salts;
 
     /// @notice USDC token address on this chain
     address public usdc;
@@ -39,7 +31,7 @@ contract PaymentIntentHandler is Ownable, IPaymentHook {
     event EmergencyRecovery(address to, uint256 amount);
 
     /// @notice Initializes the contract with the USDC and Circle Messenger addresses
-    constructor(address _usdc, address _owner) Ownable() {
+    constructor(address _usdc, address _owner) Ownable() Signatures() {
         usdc = _usdc;
 
         _transferOwnership(_owner);
@@ -52,18 +44,25 @@ contract PaymentIntentHandler is Ownable, IPaymentHook {
       bytes calldata _structData
     ) external override returns (bool) {
 
-        PaymentIntent memory intent = abi.decode(_structData, (PaymentIntent));
+        PaymentIntentHookData memory _hookData = abi.decode(_structData, (PaymentIntentHookData));
 
+        // check if the salt has been used
+        require(!salts[_hookData.intent.salt], "Salt already used");
+        salts[_hookData.intent.salt] = true;
+
+        // verify the intent signature by the merchant
+        bytes32 _hash = _hashPaymentIntent(_hookData.intent);
+        _verifySignature(_hash, _hookData.intent.merchant, _hookData.signature);
 
         uint256 netMinted = _burnAmount - _feeExecuted;
 
-        uint256 grossFee = intent.amount * intent.feeBps / 10_000;
-        uint256 netPayable = intent.amount - grossFee;
+        uint256 grossFee = _hookData.intent.amount * _hookData.intent.feeBps / 10_000;
+        uint256 netPayable = _hookData.intent.amount - grossFee;
 
         uint256 netFee = netMinted - netPayable;
 
-        IERC20(usdc).transfer(intent.merchant, netPayable);
-        IERC20(usdc).transfer(intent.feeRecipient, netFee);
+        IERC20(usdc).transfer(_hookData.intent.merchant, netPayable);
+        IERC20(usdc).transfer(_hookData.intent.feeRecipient, netFee);
 
         return true;
     }

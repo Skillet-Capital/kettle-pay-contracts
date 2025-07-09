@@ -5,7 +5,7 @@ pragma abicoder v2;
 import {SafeERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
 import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
 import {Signatures} from "./Signatures.sol";
-import {PaymentIntentHookData} from "./Structs.sol";
+import {PaymentIntentHookData, PaymentIntent} from "./Structs.sol";
 import {ReentrancyGuard} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {AccessControl} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {SafeMath} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/math/SafeMath.sol";
@@ -61,6 +61,51 @@ contract PaymentIntentHandlerV1 is
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _setupRole(RECOVER_ROLE, msg.sender);
+    }
+
+    /// @notice locally fulfill a payment intent
+    function localExecuteHook(
+        PaymentIntent memory _intent,
+        bytes memory _signature
+    ) external nonReentrant returns (bool) {
+
+        // check if the salt has been used
+        require(!salts[_intent.salt], "Salt already used");
+        salts[_intent.salt] = true;
+
+        bytes32 _hash = _hashPaymentIntent(_intent);
+        _verifySignature(_hash, _intent.merchant, _signature);
+
+        require(_intent.amount > 0, "Invalid amount");
+        require(_intent.feeBps <= 10_000, "Invalid fee bps");
+        require(_intent.merchant != address(0), "Invalid merchant");
+
+        uint256 _grossFee = _intent.amount
+            .mul(_intent.feeBps)
+            .div(10_000);
+
+        require(_grossFee < _intent.amount, "Fee too high");
+
+        IERC20(usdc).safeTransferFrom(msg.sender, _intent.merchant, _intent.amount - _grossFee);
+
+        if (_grossFee > 0 && _intent.feeRecipient != address(0)) {
+            IERC20(usdc).safeTransferFrom(msg.sender, _intent.feeRecipient, _grossFee);
+        }
+
+        emit PaymentIntentSuccess(
+            bytes32(_intent.salt),
+            _intent.merchant,
+            _intent.amount,
+            0,
+            _intent.amount,
+            _intent.amount - _grossFee,
+            _grossFee,
+            _intent.feeBps,
+            _intent.feeRecipient,
+            _intent.salt
+        );
+
+        return true;
     }
 
     /// @inheritdoc IPaymentHook

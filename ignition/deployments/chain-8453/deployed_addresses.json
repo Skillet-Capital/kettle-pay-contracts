@@ -1,4 +1,6 @@
 {
   "CCTPHookWrapper#CCTPHookWrapper": "0x77c394c77836Df7E840C6FdB8934f539658449f7",
-  "PaymentIntentHandlerV1#PaymentIntentHandlerV1": "0x2101E6ef606fB1aCE34660284D3d6c28C0fB403d"
+  "PaymentIntentHandlerV1#PaymentIntentHandlerV1": "0x2101E6ef606fB1aCE34660284D3d6c28C0fB403d",
+  "CCTPBurnHookWrapper#CCTPBurnHookWrapper": "0xE208cD090eef860CacF948d638374eDDAD4c2aCb",
+  "SwapWrapper#SwapWrapper": "0x02C023d10bebC319A49862547002353BBA4Ae7bD"
 }

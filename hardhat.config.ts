@@ -25,7 +25,15 @@ const config: HardhatUserConfig = {
     base: {
       url: process.env.BASE_RPC_URL,
       accounts: [process.env.PRIVATE_KEY!],
-    }
+    },
+    mainnet: {
+      url: process.env.MAINNET_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+    arbitrum: {
+      url: process.env.ARBITRUM_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
   },
   etherscan: {
     apiKey: {

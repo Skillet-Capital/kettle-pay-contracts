@@ -10,7 +10,7 @@ interface IPaymentHook {
     /// @param _amount The amount of the payment intent
     /// @param _messageSender The address that sent the message
     /// @param _maxFee The maximum fee that was executed
-    function executeHook(
+    function executePaymentHook(
         bytes32 _nonce,
         uint32 _version,
         bytes32 _burnToken,

@@ -1,12 +1,13 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import CCTPHookWrapper from "../CCTPHookWrapper";
+import CCTPMintHookWrapper from "../cctp/CCTPMintHookWrapper";
 import { toUtf8Bytes, keccak256 } from "ethers";
 
 const PaymentIntentHandlerV1 = buildModule("PaymentIntentHandlerV1", (m) => {
-  const { cctpHookWrapper } = m.useModule(CCTPHookWrapper);
+  const usdc = m.getParameter("usdc");
+  const { cctpMintHookWrapper } = m.useModule(CCTPMintHookWrapper);
   const cctpPaymentIntentReceiver = m.contract("PaymentIntentHandlerV1", [
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    cctpHookWrapper,
+    usdc,
+    cctpMintHookWrapper,
   ]);
 
   const RECOVER_ROLE = keccak256(toUtf8Bytes("RECOVER_ROLE")); 

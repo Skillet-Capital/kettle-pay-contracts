@@ -3,7 +3,6 @@ pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 import {SafeERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
-import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
 import {Signatures} from "./Signatures.sol";
 import {PaymentIntentHookData, PaymentIntent} from "./Structs.sol";
 import {ReentrancyGuard} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
@@ -11,9 +10,13 @@ import {AccessControl} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contr
 import {SafeMath} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/math/SafeMath.sol";
 import {IERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
+import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
+import {ISwapTarget} from "../interfaces/ISwapTarget.sol";
+
 /// @notice Payment intent processor for Circle CCTP V2
 contract PaymentIntentHandlerV1 is
     IPaymentHook,
+    ISwapTarget,
     Signatures,
     ReentrancyGuard,
     AccessControl
@@ -68,7 +71,30 @@ contract PaymentIntentHandlerV1 is
         PaymentIntent memory _intent,
         bytes memory _signature
     ) external nonReentrant returns (bool) {
+        return _localExecuteHook(_intent, _signature);
+    }
 
+    /// @inheritdoc ISwapTarget
+    function executeSwapHook(
+        address /*_tokenIn*/,
+        address /*_tokenOut*/,
+        uint256 /*_amountInMax*/,
+        uint256 /*_amountOut*/,
+        bytes calldata _structData
+    ) external override nonReentrant returns (bool) {
+        PaymentIntentHookData memory _hookData = abi.decode(
+            _structData,
+            (PaymentIntentHookData)
+        );
+
+        return _localExecuteHook(_hookData.intent, _hookData.signature);
+    }
+
+    /// @notice locally fulfill a payment intent
+    function _localExecuteHook(
+        PaymentIntent memory _intent,
+        bytes memory _signature
+    ) internal returns (bool) {
         // check if the salt has been used
         require(!salts[_intent.salt], "Salt already used");
         salts[_intent.salt] = true;
@@ -80,16 +106,22 @@ contract PaymentIntentHandlerV1 is
         require(_intent.feeBps <= 10_000, "Invalid fee bps");
         require(_intent.merchant != address(0), "Invalid merchant");
 
-        uint256 _grossFee = _intent.amount
-            .mul(_intent.feeBps)
-            .div(10_000);
+        uint256 _grossFee = _intent.amount.mul(_intent.feeBps).div(10_000);
 
         require(_grossFee < _intent.amount, "Fee too high");
 
-        IERC20(usdc).safeTransferFrom(msg.sender, _intent.merchant, _intent.amount - _grossFee);
+        IERC20(usdc).safeTransferFrom(
+            msg.sender,
+            _intent.merchant,
+            _intent.amount - _grossFee
+        );
 
         if (_grossFee > 0 && _intent.feeRecipient != address(0)) {
-            IERC20(usdc).safeTransferFrom(msg.sender, _intent.feeRecipient, _grossFee);
+            IERC20(usdc).safeTransferFrom(
+                msg.sender,
+                _intent.feeRecipient,
+                _grossFee
+            );
         }
 
         emit PaymentIntentSuccess(
@@ -109,7 +141,7 @@ contract PaymentIntentHandlerV1 is
     }
 
     /// @inheritdoc IPaymentHook
-    function executeHook(
+    function executePaymentHook(
         bytes32 _nonce,
         uint32 /* _version */,
         bytes32 /* _burnToken */,
@@ -121,7 +153,6 @@ contract PaymentIntentHandlerV1 is
         uint256 /* _expirationBlock */,
         bytes calldata _structData
     ) external override nonReentrant onlyHookWrapper returns (bool) {
-
         receivedMints[_nonce] = _amount - _feeExecuted;
 
         try
@@ -144,7 +175,6 @@ contract PaymentIntentHandlerV1 is
         uint256 _feeExecuted,
         bytes calldata _structData
     ) external onlySelf returns (bool) {
-
         PaymentIntentHookData memory _hookData = abi.decode(
             _structData,
             (PaymentIntentHookData)
@@ -170,7 +200,9 @@ contract PaymentIntentHandlerV1 is
 
         uint256 _netMinted = _amount - _feeExecuted;
 
-        uint256 _grossFee = _hookData.intent.amount
+        uint256 _grossFee = _hookData
+            .intent
+            .amount
             .mul(_hookData.intent.feeBps)
             .div(10_000);
 
@@ -213,7 +245,10 @@ contract PaymentIntentHandlerV1 is
     /// @notice Emergency function to recover stuck USDC in the contract by nonce
     /// @param _nonce The nonce of the cctp burn message
     /// @param _to Address to receive the recovered funds
-    function emergencyRecoverNonceMint(bytes32 _nonce, address _to) external onlyRecover {
+    function emergencyRecoverNonceMint(
+        bytes32 _nonce,
+        address _to
+    ) external onlyRecover {
         uint256 _amount = receivedMints[_nonce];
         require(_amount > 0, "No amount received");
         receivedMints[_nonce] = 0;
@@ -231,7 +266,11 @@ contract PaymentIntentHandlerV1 is
     }
 
     modifier onlyRecover() {
-        require(hasRole(RECOVER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Only recover or admin");
+        require(
+            hasRole(RECOVER_ROLE, msg.sender) ||
+                hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Only recover or admin"
+        );
         _;
     }
 }

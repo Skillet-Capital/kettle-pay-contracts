@@ -9,7 +9,7 @@ interface ISwapTarget {
     /// @param _amountOutMin The minimum amount of tokens that were minted
     /// @param _structData The struct data for the swap
     /// @return success Whether the swap was successful
-    function executeHook(
+    function executeSwapHook(
         address _tokenIn,
         address _tokenOut,
         uint256 _amountInMax,

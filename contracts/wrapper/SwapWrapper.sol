@@ -93,7 +93,7 @@ contract SwapWrapper is ReentrancyGuard {
         }
 
         // Call final target
-        ISwapTarget(params.target).executeHook(
+        ISwapTarget(params.target).executeSwapHook(
             params.tokenIn,
             params.tokenOut,
             params.amountInMax,
@@ -151,8 +151,8 @@ contract SwapWrapper is ReentrancyGuard {
     }
 
     function getBalance(address token) internal view returns (uint256) {
-        if (token == address(0)) {
-            return address(this).balance;
+        if (token == address(0) || token == WETH) {
+            return IWETH(WETH).balanceOf(address(this));
         } else {
             return IERC20(token).balanceOf(address(this));
         }

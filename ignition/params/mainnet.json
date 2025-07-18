@@ -1,6 +1,6 @@
 {
   "SwapWrapper": {
-    "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
   },
   "CCTPBurnHookWrapper": {
     "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"

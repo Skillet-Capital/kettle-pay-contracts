@@ -34,6 +34,18 @@ const config: HardhatUserConfig = {
       url: process.env.ARBITRUM_RPC_URL,
       accounts: [process.env.PRIVATE_KEY!],
     },
+    polygon: {
+      url: process.env.POLYGON_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
+    optimism: {
+      url: process.env.OPTIMISM_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY!], 
+    },
+    avalanche: {
+      url: process.env.AVALANCHE_RPC_URL,
+      accounts: [process.env.PRIVATE_KEY!],
+    },
   },
   etherscan: {
     apiKey: {

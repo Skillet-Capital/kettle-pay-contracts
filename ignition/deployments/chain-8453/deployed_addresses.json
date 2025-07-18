@@ -1,9 +1,6 @@
 {
-  "CCTPMintHookWrapper#CCTPMintHookWrapper": "0x8c50b2553454367644ae10d25B6705849a133418",
-  "PaymentIntentHandlerV1#PaymentIntentHandlerV1": "0x0552B539DbF7C842da5d67fF908Aa9F0266dE3CF",
-  "CCTPBurnHookWrapper#CCTPBurnHookWrapper": "0x189A6E69A3d9478a14A5B081A19EC1390cfB5911",
-  "SwapWrapper#SwapWrapper": "0x304259bd3Ab7E0c790c10C7173A5f73A8c8e408D",
-  "SafeTransfer#SafeTransfer": "0x8DD1eeEe2E538BAfD59d8288896316b4b26ED308",
-  "SafeTransferV2#SafeTransferV2": "0x5FDDe0ca3F75D015A433af7a685D568720Ab3713",
-  "SafeTransferV3#SafeTransferV3": "0x5EE9cd8F3453787eF9c8674DC36E02E30b8D30cC"
+  "CCTPMintHookWrapper#CCTPMintHookWrapper": "0x923e1a9b0c1bF9Fb94695703F705245269e2d3Fa",
+  "PaymentIntentHandlerV1#PaymentIntentHandlerV1": "0x04489911297F067604F1CeB533e4830560eF0f18",
+  "CCTPBurnHookWrapper#CCTPBurnHookWrapper": "0x1889711c31E9ab1b6AE46ea23AD19Edb536880F2",
+  "SwapWrapper#SwapWrapper": "0x95E3eE4357a9Ed5347D328007C064b8130A5EFe5"
 }

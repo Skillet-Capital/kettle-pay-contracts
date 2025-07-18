@@ -16,4 +16,15 @@ interface ISwapTarget {
         uint256 _amountOutMin,
         bytes calldata _structData
     ) external returns (bool);
+
+    event BurnHookExecuted(
+        uint256 amount,
+        uint32 destinationDomain,
+        bytes32 mintRecipient,
+        address burnToken,
+        bytes32 destinationCaller,
+        uint256 maxFee,
+        uint32 minFinalityThreshold,
+        bytes hookData
+    );
 }

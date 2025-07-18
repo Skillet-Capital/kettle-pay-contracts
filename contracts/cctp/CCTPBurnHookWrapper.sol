@@ -69,6 +69,16 @@ contract CCTPBurnHookWrapper is ISwapTarget {
         // Reset approval for tokenIn
         IERC20(burnMessageFields.burnToken).safeApprove(TOKEN_MESSENGER, 0);
 
+        emit BurnHookExecuted(
+            burnMessageFields.amount,
+            burnMessageFields.destinationDomain,
+            burnMessageFields.mintRecipient,
+            burnMessageFields.burnToken,
+            burnMessageFields.destinationCaller,
+            burnMessageFields.maxFee,
+            burnMessageFields.minFinalityThreshold,
+            burnMessageFields.hookData
+        );
         return true;
     }
 }

@@ -49,14 +49,14 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
-      base: "228ZGK626T79PAIYKYFI631RIW2NMY52BT",
+      base: "NFWCVGXACK2N9RCYMFE3ZSDE3Q3VW9V25J",
     },
     customChains: [
       {
         network: "base",
         chainId: 8453,
         urls: {
-          apiURL: "https://api.basescan.org/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
           browserURL: "https://basescan.org",
         },
       },

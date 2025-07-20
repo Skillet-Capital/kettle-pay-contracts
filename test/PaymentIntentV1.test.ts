@@ -4,8 +4,19 @@ import {
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
 import hre from "hardhat";
-import { encodeAbiParameters, getAddress, parseAbiParameters, parseGwei, parseUnits, zeroAddress } from "viem";
+import { encodeAbiParameters, getAddress, keccak256, parseAbiParameters, parseGwei, parseUnits, zeroAddress } from "viem";
 import { randomBytes } from "crypto";
+import { toUtf8Bytes } from "ethers";
+
+enum SignerType {
+  MERCHANT,
+  OPERATOR,
+}
+
+enum QuantityType {
+  FIXED,
+  UNLIMITED,
+}
 
 type PaymentIntentStruct = {
   amount: bigint;
@@ -13,6 +24,11 @@ type PaymentIntentStruct = {
   feeRecipient: `0x${string}`;
   merchant: `0x${string}`;
   salt: bigint;
+  signerType: SignerType;
+  signer: `0x${string}`;
+  quantityType: QuantityType;
+  quantity: bigint;
+  nonce: bigint;
 };
 
 function padAddress(address: `0x${string}`): `0x${string}` {
@@ -41,13 +57,13 @@ function randomBytes32(): `0x${string}` {
   return `0x${randomBytes(32).toString("hex")}`;
 }
 
-describe("PaymentIntentHandlerV1", function () {
+describe("PaymentIntentHandlerV2", function () {
   async function deployPaymentIntentHandlerFixture() {
     // Contracts are deployed using the first signer/account by default
-    const [owner, feeRecipient] = await hre.viem.getWalletClients();
+    const [owner, feeRecipient, operator] = await hre.viem.getWalletClients();
 
     const usdc = await hre.viem.deployContract("MockERC20");
-    const paymentIntentHandler = await hre.viem.deployContract("PaymentIntentHandlerV1", [usdc.address, owner.account.address]);
+    const paymentIntentHandler = await hre.viem.deployContract("PaymentIntentHandlerV2", [usdc.address, owner.account.address]);
 
     const publicClient = await hre.viem.getPublicClient();
 
@@ -57,6 +73,7 @@ describe("PaymentIntentHandlerV1", function () {
       owner,
       feeRecipient,
       publicClient,
+      operator,
     };
   }
 
@@ -74,11 +91,16 @@ describe("PaymentIntentHandlerV1", function () {
         feeRecipient: feeRecipient.account.address,
         merchant: owner.account.address,
         salt: BigInt(1),
+        signerType: SignerType.MERCHANT,
+        signer: owner.account.address,
+        quantityType: QuantityType.FIXED,
+        quantity: BigInt(1),
+        nonce: BigInt(1),
       } as PaymentIntentStruct;
 
       signature = await owner.signTypedData({
         domain: {
-          name: "PaymentIntentHandlerV1",
+          name: "PaymentIntentHandlerV2",
           version: "1",
           chainId: await publicClient.getChainId(),
           verifyingContract: paymentIntentHandler.address,
@@ -90,6 +112,11 @@ describe("PaymentIntentHandlerV1", function () {
             { name: "feeRecipient", type: "address" },
             { name: "merchant", type: "address" },
             { name: "salt", type: "uint256" },
+            { name: "quantityType", type: "uint8" },
+            { name: "quantity", type: "uint256" },
+            { name: "signerType", type: "uint8" },
+            { name: "signer", type: "address" },
+            { name: "nonce", type: "uint256" },
           ],
         },
         primaryType: "PaymentIntent",
@@ -101,205 +128,174 @@ describe("PaymentIntentHandlerV1", function () {
     it("Should deploy the payment intent handler", async function () {
       const { paymentIntentHandler, usdc, owner, publicClient } = await loadFixture(deployPaymentIntentHandlerFixture);
 
-      await usdc.write.mint([paymentIntentHandler.address, intent.amount]);
+      await usdc.write.mint([intent.merchant, intent.amount]);
+      await usdc.write.approve([paymentIntentHandler.address, intent.amount]);
 
-      const encodedHookData = encodeAbiParameters(
-        [
-          {
-            name: "hookData",
-            type: "tuple", // ← could be "PaymentIntentHookData" but "tuple" is fine
-            components: [
-              {
-                name: "intent",
-                type: "tuple", // ← this could be "PaymentIntent" for clarity
-                components: [
-                  { name: "amount", type: "uint256" },
-                  { name: "feeBps", type: "uint256" },
-                  { name: "feeRecipient", type: "address" },
-                  { name: "merchant", type: "address" },
-                  { name: "salt", type: "uint256" },
-                ],
-              },
-              { name: "signature", type: "bytes" },
-            ],
-          },
-        ],
-        [
-          {
-            intent: {
-              amount: intent.amount,
-              feeBps: intent.feeBps,
-              feeRecipient: intent.feeRecipient,
-              merchant: intent.merchant,
-              salt: intent.salt,
-            },
-            signature,
-          },
-        ]
-      );
-
-      const hash = await paymentIntentHandler.write.executeHook([
-        randomBytes32(),
-        1,
-        padAddress(usdc.address),
-        padAddress(paymentIntentHandler.address),
-        intent.amount,
-        padAddress(owner.account.address),
-        BigInt(100),
-        BigInt(0),
-        BigInt(0),
-        encodedHookData
+      const hash = await paymentIntentHandler.write.localExecuteHook([
+        intent,
+        signature
       ]);
 
       await publicClient.waitForTransactionReceipt({ hash });
 
-      const PaymentIntentSuccessEvents = await paymentIntentHandler.getEvents.PaymentIntentSuccess();
-      expect(PaymentIntentSuccessEvents).to.have.lengthOf(1);
-      console.log(parsePaymentIntentSuccessEvent(PaymentIntentSuccessEvents[0]));
+      const usage = await paymentIntentHandler.read.usages([intent.salt]);
+      expect(usage).to.equal(1n);
 
-      const rejected = await paymentIntentHandler.write.executeHook([
-        randomBytes32(),
-        1,
-        padAddress(usdc.address),
-        padAddress(paymentIntentHandler.address),
-        intent.amount,
-        padAddress(owner.account.address),
-        BigInt(100),
-        BigInt(0),
-        BigInt(0),
-        encodedHookData
+      // test failure because of over usage
+      await expect(paymentIntentHandler.write.localExecuteHook([
+        intent,
+        signature
+      ])).to.be.rejectedWith("Quantity already used");
+    });
+
+    it("Should allow merchant to update the nonce", async function () {
+      const { owner, feeRecipient, publicClient, paymentIntentHandler, operator, usdc } = await loadFixture(deployPaymentIntentHandlerFixture);
+
+      // execute the intent
+      await usdc.write.mint([owner.account.address, intent.amount]);
+      await usdc.write.approve([paymentIntentHandler.address, intent.amount]);
+
+      const hash = await paymentIntentHandler.write.localExecuteHook([
+        intent,
+        signature
       ]);
 
-      await publicClient.waitForTransactionReceipt({ hash: rejected });
+      await publicClient.waitForTransactionReceipt({ hash });
 
-      const PaymentIntentFailedEvents = await paymentIntentHandler.getEvents.PaymentIntentFailed();
-      expect(PaymentIntentFailedEvents).to.have.lengthOf(1);
-      console.log(parsePaymentIntentFailedEvent(PaymentIntentFailedEvents[0]));
+      // update the nonce
+      const updatedIntent = {
+        amount: parseUnits("100", 6),
+        feeBps: BigInt(100),
+        feeRecipient: feeRecipient.account.address,
+        merchant: owner.account.address,
+        salt: BigInt(1),
+        signerType: SignerType.MERCHANT,
+        signer: owner.account.address,
+        quantityType: QuantityType.FIXED,
+        quantity: BigInt(2),
+        nonce: BigInt(2),
+      } as PaymentIntentStruct;
+
+      const updatedSignature = await operator.signTypedData({
+        domain: {
+          name: "PaymentIntentHandlerV2",
+          version: "1",
+          chainId: await publicClient.getChainId(),
+          verifyingContract: paymentIntentHandler.address,
+        },
+        types: {
+          PaymentIntent: [
+            { name: "amount", type: "uint256" },
+            { name: "feeBps", type: "uint256" },
+            { name: "feeRecipient", type: "address" },
+            { name: "merchant", type: "address" },
+            { name: "salt", type: "uint256" },
+            { name: "quantityType", type: "uint8" },
+            { name: "quantity", type: "uint256" },
+            { name: "signerType", type: "uint8" },
+            { name: "signer", type: "address" },
+            { name: "nonce", type: "uint256" },
+          ],
+        },
+        primaryType: "PaymentIntent",
+        message: updatedIntent,
+        account: owner.account.address,
+      });
+
+      await usdc.write.mint([owner.account.address, updatedIntent.amount]);
+      await usdc.write.approve([paymentIntentHandler.address, updatedIntent.amount]);
+
+      await paymentIntentHandler.write.localExecuteHook([
+        updatedIntent,
+        updatedSignature
+      ]);
+
+      const usage = await paymentIntentHandler.read.usages([intent.salt]);
+      expect(usage).to.equal(2n);
+
+      // test failure because of old nonce
+      await expect(paymentIntentHandler.write.localExecuteHook([
+        intent,
+        updatedSignature
+      ])).to.be.rejectedWith("Using old intent nonce");
+
+      // test failure because of over usage
+      await expect(paymentIntentHandler.write.localExecuteHook([
+        updatedIntent,
+        updatedSignature
+      ])).to.be.rejectedWith("Quantity already used");
     });
 
     it("Should reject if invalid signature", async function () {
       const { paymentIntentHandler, usdc, publicClient, owner } = await loadFixture(deployPaymentIntentHandlerFixture);
 
-      await usdc.write.mint([paymentIntentHandler.address, intent.amount]);
+      await expect(paymentIntentHandler.write.localExecuteHook([
+        intent,
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ])).to.be.rejectedWith("InvalidVParameter");
 
-      const encodedHookData = encodeAbiParameters(
-        [
-          {
-            name: "hookData",
-            type: "tuple", // ← could be "PaymentIntentHookData" but "tuple" is fine
-            components: [
-              {
-                name: "intent",
-                type: "tuple", // ← this could be "PaymentIntent" for clarity
-                components: [
-                  { name: "amount", type: "uint256" },
-                  { name: "feeBps", type: "uint256" },
-                  { name: "feeRecipient", type: "address" },
-                  { name: "merchant", type: "address" },
-                  { name: "salt", type: "uint256" },
-                ],
-              },
-              { name: "signature", type: "bytes" },
-            ],
-          },
-        ],
-        [
-          {
-            intent: {
-              amount: intent.amount,
-              feeBps: intent.feeBps,
-              feeRecipient: intent.feeRecipient,
-              merchant: intent.merchant,
-              salt: intent.salt,
-            },
-            signature: "0x0000000000000000000000000000000000000000000000000000000000000000",
-          },
-        ]
-      );
+      await expect(paymentIntentHandler.write.localExecuteHook([
+        {
+          ...intent,
+          salt: intent.salt + 1n,
+        },
+        signature
+      ])).to.be.rejectedWith("InvalidSignature");
+    });
 
-      const rejected = await paymentIntentHandler.write.executeHook([
-        randomBytes32(),
-        1,
-        padAddress(usdc.address),
-        padAddress(paymentIntentHandler.address),
-        intent.amount,
-        padAddress(owner.account.address),
-        BigInt(100),
-        BigInt(0),
-        BigInt(0),
-        encodedHookData
-      ]);
-      await publicClient.waitForTransactionReceipt({ hash: rejected });
+    it("Should allow operator to execute payment intent", async function () {
+      const { owner, feeRecipient, publicClient, paymentIntentHandler, operator, usdc } = await loadFixture(deployPaymentIntentHandlerFixture);
 
-      const PaymentIntentFailedEvents = await paymentIntentHandler.getEvents.PaymentIntentFailed();
-      expect(PaymentIntentFailedEvents).to.have.lengthOf(1);
+      intent = {
+        amount: parseUnits("100", 6),
+        feeBps: BigInt(100),
+        feeRecipient: feeRecipient.account.address,
+        merchant: owner.account.address,
+        salt: BigInt(1),
+        signerType: SignerType.OPERATOR,
+        signer: operator.account.address,
+        quantityType: QuantityType.FIXED,
+        quantity: BigInt(1),
+        nonce: BigInt(1),
+      } as PaymentIntentStruct;
 
-      const failureEvent = parsePaymentIntentFailedEvent(PaymentIntentFailedEvents[0]);
-      expect(failureEvent.reason).to.equal("InvalidVParameter");
+      signature = await operator.signTypedData({
+        domain: {
+          name: "PaymentIntentHandlerV2",
+          version: "1",
+          chainId: await publicClient.getChainId(),
+          verifyingContract: paymentIntentHandler.address,
+        },
+        types: {
+          PaymentIntent: [
+            { name: "amount", type: "uint256" },
+            { name: "feeBps", type: "uint256" },
+            { name: "feeRecipient", type: "address" },
+            { name: "merchant", type: "address" },
+            { name: "salt", type: "uint256" },
+            { name: "quantityType", type: "uint8" },
+            { name: "quantity", type: "uint256" },
+            { name: "signerType", type: "uint8" },
+            { name: "signer", type: "address" },
+            { name: "nonce", type: "uint256" },
+          ],
+        },
+        primaryType: "PaymentIntent",
+        message: intent,
+        account: operator.account.address,
+      });
 
-      // make sure the salt is not logged as used yet
-      const salts = await paymentIntentHandler.read.salts([intent.salt]);
-      expect(salts).to.be.false;
+      const OPERATOR_ROLE = keccak256(toUtf8Bytes("OPERATOR_ROLE"));
+      await paymentIntentHandler.write.grantRole([OPERATOR_ROLE, operator.account.address]);
 
-      const encodedHookData2 = encodeAbiParameters(
-        [
-          {
-            name: "hookData",
-            type: "tuple", // ← could be "PaymentIntentHookData" but "tuple" is fine
-            components: [
-              {
-                name: "intent",
-                type: "tuple", // ← this could be "PaymentIntent" for clarity
-                components: [
-                  { name: "amount", type: "uint256" },
-                  { name: "feeBps", type: "uint256" },
-                  { name: "feeRecipient", type: "address" },
-                  { name: "merchant", type: "address" },
-                  { name: "salt", type: "uint256" },
-                ],
-              },
-              { name: "signature", type: "bytes" },
-            ],
-          },
-        ],
-        [
-          {
-            intent: {
-              amount: intent.amount,
-              feeBps: intent.feeBps,
-              feeRecipient: intent.feeRecipient,
-              merchant: intent.merchant,
-              salt: intent.salt + 1n,
-            },
-            signature,
-          },
-        ]
-      );
+      await usdc.write.mint([owner.account.address, intent.amount]);
+      await usdc.write.approve([paymentIntentHandler.address, intent.amount]);
 
-      const rejected2 = await paymentIntentHandler.write.executeHook([
-        randomBytes32(),
-        1,
-        padAddress(usdc.address),
-        padAddress(paymentIntentHandler.address),
-        intent.amount,
-        padAddress(owner.account.address),
-        BigInt(100),
-        BigInt(0),
-        BigInt(0),
-        encodedHookData2
+      await paymentIntentHandler.write.localExecuteHook([
+        intent,
+        signature
       ]);
 
-      await publicClient.waitForTransactionReceipt({ hash: rejected2 });
-
-      const PaymentIntentFailedEvents2 = await paymentIntentHandler.getEvents.PaymentIntentFailed();
-      expect(PaymentIntentFailedEvents2).to.have.lengthOf(1);
-
-      const failureEvent2 = parsePaymentIntentFailedEvent(PaymentIntentFailedEvents2[0]);
-      expect(failureEvent2.reason).to.equal("InvalidSignature");
-
-      // make sure the salt is not logged as used
-      const salts2 = await paymentIntentHandler.read.salts([intent.salt + 1n]);
-      expect(salts2).to.be.false;
     });
   });
 });

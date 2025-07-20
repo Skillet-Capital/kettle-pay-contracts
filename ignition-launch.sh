@@ -1,5 +1,6 @@
 # # BASE PAYMENT DEPLOYMENT
-npx hardhat ignition deploy ignition/modules/v1/PaymentIntentHandler.ts --parameters ignition/params/base.json --network base
+# npx hardhat ignition deploy ignition/modules/v1/PaymentIntentHandler.ts --parameters ignition/params/base.json --network base
+npx hardhat ignition deploy ignition/modules/v2/PaymentIntentHandlerV2.ts --parameters ignition/params/base.json --network base
 
 # # BASE DEPLOYMENT
 # npx hardhat ignition deploy ignition/modules/cctp/CCTPBurnHookWrapper.ts --parameters ignition/params/base.json --network base

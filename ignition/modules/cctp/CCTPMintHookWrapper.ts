@@ -9,6 +9,7 @@ const CCTPMintHookWrapper = buildModule("CCTPMintHookWrapper", (m) => {
 
   // privy smart wallet
   m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, "0x6aE9B7217D4BC8fAECfb9DD18B655bd26f71427d"], { id: "cctp_hook_wrapper_set_relayer_1" });
+  m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, "0x675419b5E0B3C2b32522E27b8C3EBF9592AfDF59"], { id: "cctp_hook_wrapper_set_relayer_2" });
 
   return { cctpMintHookWrapper };
 });

@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
+  "scripts": {
+    "codegen": "graph codegen",
+    "build": "graph build",
+    "deploy": "graph deploy kettle-pay --node https://subgraphs.alchemy.com/api/subgraphs/deploy --deploy-key fQFj7KyJqzWJi --ipfs https://ipfs.satsuma.xyz subgraph.yaml"
+  },
   "devDependencies": {
+    "@graphprotocol/graph-cli": "^0.87.0",
+    "@graphprotocol/graph-ts": "^0.37.0",
     "@nomicfoundation/hardhat-chai-matchers": "^2.0.9",
     "@nomicfoundation/hardhat-ethers": "^3.0.9",
     "@nomicfoundation/hardhat-ignition": "^0.15.0",

@@ -1,0 +1,26 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: PaymentIntentHandlerV3
+    network: base
+    source:
+      address: "0xecc0dcd6c615ff25d5108db2cc903469d3d1735a"
+      abi: PaymentIntentHandlerV3
+      startBlock: 33132948
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - IntentFulfillment
+      abis:
+        - name: PaymentIntentHandlerV3
+          file: ./abis/PaymentIntentHandlerV3.json
+      eventHandlers:
+        - event: PaymentIntentSuccess(indexed bytes32,indexed bytes32,(uint256,uint256,address,address,uint256,uint8,uint256,uint8,address,uint256),uint256,uint256,uint256,uint256,uint256)
+          handler: handlePaymentIntentSuccess
+      file: ./handlers/paymentIntent.ts

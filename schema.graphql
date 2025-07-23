@@ -1,0 +1,11 @@
+type IntentFulfillment @entity {
+  id: ID!
+  orderId: Bytes!
+  amount: BigInt!
+  salt: Bytes!
+  merchant: Bytes!
+  netAmount: BigInt!
+  feeAmount: BigInt!
+  timestamp: BigInt!
+  txn: Bytes!
+}

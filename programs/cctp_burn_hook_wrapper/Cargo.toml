@@ -1,0 +1,12 @@
+[package]
+name = "cctp_burn_hook_wrapper"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "=0.31.0"
+anchor-spl = "=0.31.0"
+token-messenger-minter-v2 = { path = "../../lib/solana-cctp-contracts/programs/v2/token-messenger-minter-v2", features = ["no-entrypoint", "cpi"] }

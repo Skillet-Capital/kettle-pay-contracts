@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
@@ -19,7 +19,7 @@ contract Signatures {
 
     bytes32 private _PAYMENT_INTENT_TYPEHASH;
 
-    string private constant _NAME = "PaymentIntentHandlerV4";
+    string private constant _NAME = "PaymentIntentHandler";
     string private constant _VERSION = "1";
 
     constructor() {
@@ -27,12 +27,6 @@ contract Signatures {
             _EIP_712_DOMAIN_TYPEHASH,
             _PAYMENT_INTENT_TYPEHASH
         ) = _createTypeHashes();
-    }
-
-    function hashPaymentIntent(
-        PaymentIntent memory intent
-    ) external view returns (bytes32) {
-        return _hashPaymentIntent(intent);
     }
 
     function _createTypeHashes()

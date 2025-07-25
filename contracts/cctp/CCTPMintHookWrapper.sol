@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
+pragma abicoder v2;
 
+import {IERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {IReceiverV2} from "../../lib/evm-cctp-contracts/src/interfaces/v2/IReceiverV2.sol";
 import {TypedMemView} from "../../lib/evm-cctp-contracts/lib/memview-sol/contracts/TypedMemView.sol";
 import {MessageV2} from "../../lib/evm-cctp-contracts/src/messages/v2/MessageV2.sol";
@@ -9,11 +11,11 @@ import {AccessControl} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contr
 import {ReentrancyGuard} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 
 import {IPaymentHook} from "../interfaces/IPaymentHook.sol";
+import {PaymentIntent, PaymentIntentHookData} from "../Structs.sol";
 
 /**
  * @title CCTPHookWrapper
- * @notice A sample wrapper around CCTP v2 that relays a message and
- * optionally executes the hook contained in the Burn Message.
+ * @notice Calls CCTP's receive message
  * @dev Intended to only work with CCTP v2 message formats and interfaces.
  */
 contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
@@ -28,6 +30,12 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         uint256 expirationBlock;
     }
 
+    struct PaymentIntentOrder {
+        address target;
+        bytes32 orderId;
+        bytes32 intentHash;
+    }
+
     // ============ Constants ============
     // Address of the local message transmitter
     IReceiverV2 public immutable MESSAGE_TRANSMITTER;
@@ -40,6 +48,7 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
 
     // setup the relayer role
     bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
+    bytes32 public constant RECOVERY_ROLE = keccak256("RECOVERY_ROLE");
 
     // ============ Libraries ============
     using TypedMemView for bytes;
@@ -47,9 +56,7 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
 
     event CCTPHookExecuted(
         bytes32 indexed nonce,
-        address indexed hookTarget,
-        bool success,
-        bytes returnData
+        PaymentIntentOrder order
     );
 
     // ============ Constructor ============
@@ -65,48 +72,17 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         MESSAGE_TRANSMITTER = IReceiverV2(_messageTransmitter);
 
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(RECOVERY_ROLE, msg.sender);
         _setupRole(RELAYER_ROLE, msg.sender);
     }
 
     // ============ External Functions  ============
-    /**
-     * @notice Relays a burn message to a local message transmitter
-     * and executes the hook, if present.
-     *
-     * @dev This function is permissionless and can be called by anyone. The hook target is determined
-     * by the mintRecipient field in the burn message, which must implement the IPaymentHook interface.
-     * The hook is called with the executeHook function, passing burn amount, fee executed, message sender,
-     * and the raw hook data from the burn message.
-     *
-     * @dev The hook data can be any arbitrary bytes and is passed directly to the hook target's
-     * executeHook function as the _structData parameter.
-     *
-     * WARNING: this implementation does NOT enforce atomicity in the hook call. This is to prevent a failed hook call
-     * from preventing relay of a message if this contract is set as the destinationCaller.
-     *
-     * @dev Reverts if the receiveMessage() call to the local message transmitter reverts, or returns false.
-     * @param message The message to relay, as bytes
-     * @param attestation The attestation corresponding to the message, as bytes
-     * @return relaySuccess True if the call to the local message transmitter succeeded.
-     * @return hookSuccess True if the call to the hook target succeeded. False if the hook call failed,
-     * or if no hook was present.
-     * @return hookReturnData The data returned from the call to the hook target. This will be empty
-     * if there was no hook in the message.
-     */
-    function relay(
+    function relayIntent(
         bytes calldata message,
-        bytes calldata attestation
-    )
-        external
-        virtual
-        nonReentrant
-        onlyRelayer
-        returns (
-            bool relaySuccess,
-            bool hookSuccess,
-            bytes memory hookReturnData
-        )
-    {
+        bytes calldata attestation,
+        PaymentIntent memory intent,
+        bytes memory signature
+    ) external virtual nonReentrant onlyRelayer {
         // Validate message
         bytes29 _msg = message.ref(0);
         MessageV2._validateMessageFormat(_msg);
@@ -125,8 +101,10 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         );
 
         // Relay message
-        relaySuccess = MESSAGE_TRANSMITTER.receiveMessage(message, attestation);
-        require(relaySuccess, "Receive message failed");
+        require(
+            MESSAGE_TRANSMITTER.receiveMessage(message, attestation),
+            "Receive message failed"
+        );
 
         // Extract message nonce
         bytes32 _nonce = MessageV2._getNonce(_msg);
@@ -134,58 +112,83 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         // Handle hook if present
         bytes29 _hookData = BurnMessageV2._getHookData(_msgBody);
 
-        if (_hookData.isValid()) {
-            // clone struct data into memory from hook data pointer
-            bytes memory _structData = _hookData.clone();
+        // clone the hook data into memory
+        bytes memory _structData = _hookData.clone();
 
-            // extract burn amount and fees
-            BurnMessageFields memory fields = _parseBurnMessageFields(_msgBody);
+        // parse the burn message fields
+        BurnMessageFields memory fields = _parseBurnMessageFields(_msgBody);
 
-            bytes memory callData = abi.encodeWithSelector(
-                IPaymentHook.executePaymentHook.selector,
-                _nonce,
-                fields.version,
-                fields.burnToken,
-                fields.mintRecipient,
-                fields.amount,
-                fields.messageSender,
-                fields.maxFee,
-                fields.feeExecuted,
-                fields.expirationBlock,
-                _structData
-            );
+        // decode the struct data into a PaymentIntentOrder and verify the intent hash
+        PaymentIntentOrder memory order = abi.decode(
+            _structData,
+            (PaymentIntentOrder)
+        );
 
-            (hookSuccess, hookReturnData) = _executeHook(
-                address(uint160(uint256(fields.mintRecipient))),
-                callData
-            );
+        // approve the mint recipient to spend the burn token
+        _executePaymentHook(_nonce, order, fields, intent, signature);
 
-            emit CCTPHookExecuted(
-                _nonce,
-                address(uint160(uint256(fields.mintRecipient))),
-                hookSuccess,
-                hookReturnData
-            );
-        }
+        emit CCTPHookExecuted(
+            _nonce,
+            order
+        );
     }
 
-    // ============ Internal Functions  ============
-    /**
-     * @notice Handles hook data by executing a call to a target address
-     * @dev Can be overridden to customize execution behavior
-     * @dev Does not revert if the CALL to the hook target fails
-     * @param _hookTarget The target address of the hook
-     * @param _hookCalldata The hook calldata
-     * @return _success True if the call to the encoded hook target succeeds
-     * @return _returnData The data returned from the call to the hook target
-     */
-    function _executeHook(
-        address _hookTarget,
-        bytes memory _hookCalldata
-    ) internal virtual returns (bool _success, bytes memory _returnData) {
+    function _executePaymentHook(
+        bytes32 _nonce,
+        PaymentIntentOrder memory _order,
+        BurnMessageFields memory _fields,
+        PaymentIntent memory _intent,
+        bytes memory _signature
+    ) internal {
+        require(
+            IPaymentHook(_order.target).hashPaymentIntent(_intent) ==
+                _order.intentHash,
+            "Invalid intent hash"
+        );
 
-        // solhint-disable-next-line avoid-low-level-calls
-        (_success, _returnData) = address(_hookTarget).call(_hookCalldata);
+        // approve the mint recipient to spend the burn token
+        _approveTarget(
+            _fields.burnToken,
+            _order.target,
+            _fields.amount - _fields.feeExecuted
+        );
+
+        PaymentIntentHookData memory hookData = PaymentIntentHookData({
+            orderId: _order.orderId,
+            intent: _intent,
+            signature: _signature
+        });
+
+        // execute the payment hook
+        IPaymentHook(_order.target).executePaymentHook(
+            _nonce,
+            _fields.version,
+            _fields.burnToken,
+            _fields.mintRecipient,
+            _fields.amount,
+            _fields.messageSender,
+            _fields.maxFee,
+            _fields.feeExecuted,
+            _fields.expirationBlock,
+            hookData
+        );
+
+        // reset the approval for the burn token
+        _approveTarget(_fields.burnToken, _order.target, 0);
+    }
+
+    function _approveTarget(
+        bytes32 _burnToken,
+        address _target,
+        uint256 _amount
+    ) internal {
+        IERC20(_bytes32ToAddress(_burnToken)).approve(_target, _amount);
+    }
+
+    function _bytes32ToAddress(
+        bytes32 _bytes32
+    ) internal pure returns (address) {
+        return address(uint160(uint256(_bytes32)));
     }
 
     function _parseBurnMessageFields(
@@ -202,7 +205,11 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
     }
 
     modifier onlyRelayer() {
-        require(hasRole(RELAYER_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Only relayer or admin");
+        require(
+            hasRole(RELAYER_ROLE, msg.sender) ||
+                hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Only relayer or admin"
+        );
         _;
     }
 }

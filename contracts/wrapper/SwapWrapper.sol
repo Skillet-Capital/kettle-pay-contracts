@@ -8,6 +8,8 @@ import {ReentrancyGuard} from "../../lib/evm-cctp-contracts/lib/openzeppelin-con
 import {SafeERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/SafeERC20.sol";
 import {IERC20} from "../../lib/evm-cctp-contracts/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
+import "hardhat/console.sol";
+
 contract SwapWrapper is ReentrancyGuard {
     using SafeERC20 for IERC20;
     address public immutable WETH;
@@ -42,6 +44,8 @@ contract SwapWrapper is ReentrancyGuard {
     function executeSwap(
         RouteParams calldata params
     ) external payable nonReentrant {
+
+        // Deposit ETH into WETH, or transfer tokenIn to this contract
         if (params.tokenIn == address(0)) {
             require(msg.value == params.amountInMax, "Invalid ETH amount");
             IWETH(WETH).deposit{value: msg.value}();
@@ -56,7 +60,7 @@ contract SwapWrapper is ReentrancyGuard {
         uint256 preTokenInBalance = getBalance(params.tokenIn);
         uint256 preTokenOutBalance = getBalance(params.tokenOut);
 
-        // Approve liquidity target to pull tokenIn (if needed)
+        // Approve liquidity target to pull tokenIn (reset approval and set new approval)
         if (params.tokenIn != address(0)) {
             IERC20(params.tokenIn).safeApprove(params.liquidityTarget, 0);
             IERC20(params.tokenIn).safeApprove(
@@ -64,6 +68,7 @@ contract SwapWrapper is ReentrancyGuard {
                 params.amountInMax
             );
         } else {
+            IWETH(WETH).approve(params.liquidityTarget, 0);
             IWETH(WETH).approve(params.liquidityTarget, params.amountInMax);
         }
 
@@ -80,10 +85,7 @@ contract SwapWrapper is ReentrancyGuard {
             IWETH(WETH).approve(params.liquidityTarget, 0);
         }
 
-        // Determine how much of the input token was used
-        uint256 usedAmountIn = preTokenInBalance - getBalance(params.tokenIn);
-
-        // Approve target to pull tokenOut (if needed)
+        // Approve target to pull tokenOut (reset approval and set new approval)
         if (params.tokenOut != address(0)) {
             IERC20(params.tokenOut).safeApprove(params.target, 0);
             IERC20(params.tokenOut).safeApprove(
@@ -106,7 +108,8 @@ contract SwapWrapper is ReentrancyGuard {
             IERC20(params.tokenOut).safeApprove(params.target, 0);
         }
 
-        // Return leftover tokenIn to sender
+        // Determine how much of the input token was used
+        uint256 usedAmountIn = preTokenInBalance - getBalance(params.tokenIn);
         uint256 tokenInLeftover = params.amountInMax - usedAmountIn;
 
         if (tokenInLeftover > 0) {
@@ -123,8 +126,7 @@ contract SwapWrapper is ReentrancyGuard {
         }
 
         // Return leftover tokenOut to sender
-        uint256 tokenOutLeftover = getBalance(params.tokenOut) -
-            preTokenOutBalance;
+        uint256 tokenOutLeftover = getBalance(params.tokenOut) - preTokenOutBalance;
 
         if (tokenOutLeftover > 0) {
             if (params.tokenOut == address(0)) {

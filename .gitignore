@@ -24,3 +24,6 @@ ignition/deployments/chain-31337
 
 /dist
 /scratch
+
+# solana programs
+/target

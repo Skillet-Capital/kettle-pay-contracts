@@ -59,6 +59,9 @@ contract PaymentIntentHandler is
     /// @notice Emitted when the nonce of an intent is updated
     event PaymentIntentNonceUpdated(uint256 indexed salt, uint256 nonce);
 
+    /// @notice Emitted when an intent is deactivated
+    event PaymentIntentDeactivated(uint256 indexed salt, bool deactivate);
+
     /// @notice Initializes the contract with the USDC and Circle Messenger addresses
     constructor(address _usdc, address _hookWrapper) Signatures() {
         require(_usdc != address(0), "Invalid USDC address");
@@ -75,47 +78,15 @@ contract PaymentIntentHandler is
     /// @param _deactivate Whether to deactivate the payment intent
     function toggleDeactivate(uint256 _salt, bool _deactivate) external {
         deactivated[msg.sender][_salt] = _deactivate;
+        emit PaymentIntentDeactivated(_salt, _deactivate);
     }
 
-    /// @notice Validate a payment intent
-    /// @param _orderId The order ID of the payment intent
-    /// @param _intent The payment intent to validate
-    /// @param _signature The signature of the payment intent
-    /// @return isValid Whether the payment intent is valid
     function validateIntent(
         bytes32 _orderId,
         PaymentIntent memory _intent,
         bytes memory _signature
-    ) public returns (bool) {
-        require(
-            !deactivated[_intent.merchant][_intent.salt],
-            "Intent deactivated"
-        );
-
-        require(
-            !orderIds[_orderId], 
-            "Order ID already used"
-        );
-
-        // check the current nonce of the intent
-        uint256 currentNonce = nonces[_intent.salt];
-        require(
-            _intent.nonce == currentNonce || _intent.nonce > currentNonce,
-            "Using old intent nonce"
-        );
-
-        // check if the payment intent has been used
-        uint256 usage = usages[_intent.salt];
-        if (_intent.quantityType == QuantityType.FIXED) {
-            require(usage < _intent.quantity, "Quantity already used");
-        }
-
-        // verify the intent signature by the merchant
-        bytes32 _hash = _hashPaymentIntent(_intent);
-        address signer = _resolveIntentSigner(_intent);
-        _verifySignature(_hash, signer, _signature);
-
-        return true;
+    ) external {
+        _validateIntent(_orderId, _intent, _signature);
     }
 
     /// @notice locally fulfill a payment intent
@@ -201,6 +172,8 @@ contract PaymentIntentHandler is
         uint256 grossFee = _intent.amount.mul(_intent.feeBps).div(10_000);
         uint256 netPayable = _intent.amount - grossFee;
 
+        require(netMinted > netPayable, "Underfunded intent");
+
         IERC20(usdc).safeTransferFrom(
             msg.sender,
             _intent.merchant,
@@ -237,6 +210,28 @@ contract PaymentIntentHandler is
         PaymentIntent memory _intent,
         bytes memory _signature
     ) internal {
+        _validateIntent(_orderId, _intent, _signature);
+
+        orderIds[_orderId] = true;
+
+        // check the current nonce of the intent and update if it's higher
+        if (_intent.nonce > nonces[_intent.salt]) {
+            nonces[_intent.salt] = _intent.nonce;
+            emit PaymentIntentNonceUpdated(_intent.salt, _intent.nonce);
+        }
+
+        usages[_intent.salt] = usages[_intent.salt] + 1;
+    }
+
+    /// @notice Validate a payment intent
+    /// @param _orderId The order ID of the payment intent
+    /// @param _intent The payment intent to validate
+    /// @param _signature The signature of the payment intent
+    function _validateIntent(
+        bytes32 _orderId,
+        PaymentIntent memory _intent,
+        bytes memory _signature
+    ) internal {
         require(
             !deactivated[_intent.merchant][_intent.salt],
             "Intent deactivated"
@@ -246,26 +241,19 @@ contract PaymentIntentHandler is
             !orderIds[_orderId], 
             "Order ID already used"
         );
-        orderIds[_orderId] = true;
 
-        // check the current nonce of the intent and update if it's higher
-        if (_intent.nonce > nonces[_intent.salt]) {
-            nonces[_intent.salt] = _intent.nonce;
-            emit PaymentIntentNonceUpdated(_intent.salt, _intent.nonce);
-        } else {
-            require(
-                _intent.nonce == nonces[_intent.salt],
-                "Using old intent nonce"
-            );
-        }
+        // check the current nonce of the intent
+        uint256 currentNonce = nonces[_intent.salt];
+        require(
+            _intent.nonce == currentNonce || _intent.nonce > currentNonce,
+            "Using old intent nonce"
+        );
 
         // check if the payment intent has been used
-        uint256 _usage = usages[_intent.salt];
+        uint256 usage = usages[_intent.salt];
         if (_intent.quantityType == QuantityType.FIXED) {
-            require(_usage < _intent.quantity, "Quantity already used");
+            require(usage < _intent.quantity, "Quantity already used");
         }
-
-        usages[_intent.salt] = _usage + 1;
 
         // verify the intent signature by the merchant
         bytes32 _hash = _hashPaymentIntent(_intent);
@@ -285,12 +273,12 @@ contract PaymentIntentHandler is
     /// @return signer The signer of the intent
     function _resolveIntentSigner(
         PaymentIntent memory _intent
-    ) internal view returns (address signer) {
+    ) internal view returns (address) {
         if (_intent.signerType == SignerType.MERCHANT) {
-            signer = _intent.merchant;
+            return _intent.merchant;
         } else if (_intent.signerType == SignerType.OPERATOR) {
             require(hasRole(OPERATOR_ROLE, _intent.signer), "Invalid operator");
-            signer = _intent.signer;
+            return _intent.signer;
         } else {
             revert("Invalid signer type");
         }

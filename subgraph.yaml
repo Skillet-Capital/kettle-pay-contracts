@@ -5,11 +5,11 @@ schema:
   file: ./schema.graphql
 dataSources:
   - kind: ethereum
-    name: PaymentIntentHandlerV3
+    name: PaymentIntentHandler
     network: base
     source:
-      address: "0xecc0dcd6c615ff25d5108db2cc903469d3d1735a"
-      abi: PaymentIntentHandlerV3
+      address: "0x7981CC5C755a6E3E5aA021fB43F29d4336245253"
+      abi: PaymentIntentHandler
       startBlock: 33132948
     mapping:
       kind: ethereum/events
@@ -18,8 +18,8 @@ dataSources:
       entities:
         - IntentFulfillment
       abis:
-        - name: PaymentIntentHandlerV3
-          file: ./abis/PaymentIntentHandlerV3.json
+        - name: PaymentIntentHandler
+          file: ./abis/PaymentIntentHandler.json
       eventHandlers:
         - event: PaymentIntentSuccess(indexed bytes32,indexed bytes32,(uint256,uint256,address,address,uint256,uint8,uint256,uint8,address,uint256),uint256,uint256,uint256,uint256,uint256)
           handler: handlePaymentIntentSuccess

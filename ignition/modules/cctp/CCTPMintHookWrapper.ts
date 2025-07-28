@@ -2,8 +2,10 @@ import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 import { toUtf8Bytes, keccak256 } from "ethers";
 
 const CCTPMintHookWrapper = buildModule("CCTPMintHookWrapper", (m) => {
+  const usdc = m.getParameter("usdc");
   const messageTransmitter = m.getParameter("messageTransmitter");
-  const cctpMintHookWrapper = m.contract("CCTPMintHookWrapper", [messageTransmitter]);
+
+  const cctpMintHookWrapper = m.contract("CCTPMintHookWrapper", [usdc, messageTransmitter]);
 
   const RELAYER_ROLE = keccak256(toUtf8Bytes("RELAYER_ROLE")); 
 

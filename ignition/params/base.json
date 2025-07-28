@@ -6,18 +6,10 @@
     "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
   },
   "CCTPMintHookWrapper": {
-    "messageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64"
-  },
-  "PaymentIntentHandlerV1": {
+    "messageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
   },
-  "PaymentIntentHandlerV2": {
-    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-  },
-  "PaymentIntentHandlerV3": {
-    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-  },
-  "PaymentIntentHandlerV4": {
+  "PaymentIntentHandler": {
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
   }
 }

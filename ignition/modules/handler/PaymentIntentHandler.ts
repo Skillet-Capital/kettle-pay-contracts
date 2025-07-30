@@ -11,8 +11,10 @@ const PaymentIntentHandler = buildModule("PaymentIntentHandler", (m) => {
   ]);
 
   const RECOVER_ROLE = keccak256(toUtf8Bytes("RECOVER_ROLE")); 
+  const OPERATOR_ROLE = keccak256(toUtf8Bytes("OPERATOR_ROLE"));
 
   m.call(cctpPaymentIntentReceiver, "grantRole", [RECOVER_ROLE, "0x6aE9B7217D4BC8fAECfb9DD18B655bd26f71427d"], { id: "payment_intent_receiver_set_recover_1" });
+  m.call(cctpPaymentIntentReceiver, "grantRole", [OPERATOR_ROLE, "0x82fABC13D4D03599EE1cD0df11cEcFE9dC15C0b3"], { id: "payment_intent_receiver_set_operator_1" });
 
 
   return { cctpPaymentIntentReceiver };

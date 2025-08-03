@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
+pragma abicoder v2;
+
+import {PaymentIntent, PaymentIntentHookData} from "../Structs.sol";
 
 interface IPaymentHook {
     /// @notice Executes the payment intent hook
@@ -20,6 +23,10 @@ interface IPaymentHook {
         uint256 _maxFee,
         uint256 _feeExecuted,
         uint256 _expirationBlock,
-        bytes calldata _structData
+        PaymentIntentHookData memory _paymentData
     ) external returns (bool);
+
+    function hashPaymentIntent(
+        PaymentIntent memory _intent
+    ) external view returns (bytes32);
 }

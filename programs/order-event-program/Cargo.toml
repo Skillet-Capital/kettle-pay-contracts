@@ -1,0 +1,22 @@
+[package]
+name = "order-event-program"
+version = "0.1.0"
+description = "Emit events for CCTP burn execution"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "order_event_program"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+
+
+[dependencies]
+anchor-lang = "0.31.1"
+

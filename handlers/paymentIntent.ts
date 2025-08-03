@@ -1,5 +1,5 @@
 import { BigInt, Bytes } from "@graphprotocol/graph-ts";
-import { PaymentIntentSuccess } from "../generated/PaymentIntentHandlerV3/PaymentIntentHandlerV3";
+import { PaymentIntentSuccess } from "../generated/PaymentIntentHandler/PaymentIntentHandler";
 import { IntentFulfillment } from "../generated/schema";
 
 export function formatSalt(salt: BigInt): Bytes {

@@ -4,5 +4,10 @@
   },
   "CCTPBurnHookWrapper": {
     "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+  },
+  "SwapRouter02Wrapper": {
+    "swapRouter": "0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE",
+    "burnHook": "0x42Eb885A93C1b5d32e73f50E232110Cd34b8478c",
+    "paymentHandler": "0x0000000000000000000000000000000000000000"
   }
 }

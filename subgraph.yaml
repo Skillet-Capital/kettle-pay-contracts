@@ -24,3 +24,23 @@ dataSources:
         - event: PaymentIntentSuccess(indexed bytes32,indexed bytes32,(uint256,uint256,address,address,uint256,uint8,uint256,uint8,address,uint256),uint256,uint256,uint256,uint256,uint256)
           handler: handlePaymentIntentSuccess
       file: ./handlers/paymentIntent.ts
+  - kind: ethereum
+    name: SafeTransferRouter
+    network: base
+    source:
+      address: "0x5EE9cd8F3453787eF9c8674DC36E02E30b8D30cC"
+      abi: SafeTransferRouter
+      startBlock: 33132948
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - SafeTransfer
+      abis:
+        - name: SafeTransferRouter
+          file: ./abis/SafeTransferRouter.json
+      eventHandlers:
+        - event: SafeTransferToToken(indexed address,indexed address,indexed address,uint256,bytes32)
+          handler: handleSafeTransferToToken
+      file: ./handlers/safeTransfer.ts

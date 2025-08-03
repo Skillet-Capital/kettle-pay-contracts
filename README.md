@@ -69,15 +69,21 @@ flowchart BT
 | Arbitrum     | 42161      | 0x923e1a9b0c1bF9Fb94695703F705245269e2d3Fa |
 | Avalanche    | 43114      | 0x923e1a9b0c1bF9Fb94695703F705245269e2d3Fa |
 
+### SafeTransferRouter
+| Network Name | Network ID | Contract Address                           |
+| ------------ | ---------- | ------------------------------------------ |
+| Base         | 8453       | 0x5EE9cd8F3453787eF9c8674DC36E02E30b8D30cC |
+
 ### order-event-program
 | Network Name | Contract Address                             |
 | ------------ | -------------------------------------------- |
 | Solana       | 8chVyMSYr9656RbsYsY9VyUw1seCwm5vbwe8vydmZW76 |
+ 
 
 
 
 ## PaymentIntentHandler
-Below are the four core entry points for processing payment intents on Base
+Below are the core entry points for processing payment intents on Base
 
 1. `fulfillIntent`
 
@@ -326,4 +332,39 @@ The `tokenIn` should be the token we are going to swap out of. If it is the nati
 The `_structData` should be encoded based on the target hook. 
 - If we are using `PaymentIntentHandler`, we are using `SwapRouter02Wrapper` on Base, so the data should be encoded as mentioned [above](#encodeintentdata). 
 - If we are using `CCTPBurnHookWrapper` we should encode the data as mentioned [above](#encodeorderdata)
-  
+
+# Subgraphs
+
+The subgraphs for the `PaymentIntentHandler` and the `SafeTransferRouter` are deployed on Alchemy. The [playground](https://subgraph.satsuma-prod.com/skillet/kettle-pay/playground) can be accessed here.
+
+### IntentFulfillments
+```graphql
+query IntentFulfillments($wallet: String) {
+  intentFulfillments(first: 1000, orderBy: timestamp, orderDirection: desc, where: { merchant: $wallet }) {
+    id
+    orderId
+    merchant
+    salt
+    amount
+    netAmount
+    feeAmount
+    timestamp
+  }
+}
+```
+
+### SafeTransfers
+```graphql
+query SafeTransfers($wallet: String) {
+  safeTransfers(
+    where: {or: [{to: $wallet}, {from: $wallet}]}
+  ) {
+    from
+    to
+    amount
+    memo
+    timestamp
+    txn
+  }
+}
+```

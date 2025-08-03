@@ -9,3 +9,14 @@ type IntentFulfillment @entity {
   timestamp: BigInt!
   txn: Bytes!
 }
+
+type SafeTransfer @entity {
+  id: ID!
+  from: Bytes!
+  to: Bytes!
+  amount: BigInt!
+  memo: Bytes!
+  timestamp: BigInt!
+  txn: Bytes!
+}
+

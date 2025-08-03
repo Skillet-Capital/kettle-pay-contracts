@@ -129,6 +129,7 @@ function executeSwapHook(
 
 The `_structData` should be encoded like this
 
+<a name="encodeintentdata"></a>
 ```ts
 export function encodeIntentData(
   orderId: string,
@@ -253,3 +254,76 @@ function saveRelay(
     address recoveryAddress
 ) external virtual nonReentrant onlyRelayer
 ```
+
+## CCTPBurnHookWrapper
+
+This contract implements the same interface as `PaymentIntentHandler` to implement `executeSwapHook`. However, the `_structData` encoded in CCTPBurnHookWrapper is different than what was encoded for the `PaymentIntentHandler` call. The data needs to be a packed encoding of `target`, `orderId`, and `intentHash`. Encode the data like this
+
+<a name="encodeorderdata"></a>
+```ts
+export async function encodeOrderData(
+  orderId: string,
+  intent: PaymentIntentWithSignature,
+) {
+  const client = createPublicClient({
+    chain: base,
+    transport: http(RPC_ENDPOINTS[BASE_CHAIN_ID])
+  });
+
+  const hash = await client.readContract({
+    address: PAYMENT_INTENT_HANDLER_ADDRESS,
+    abi: PaymentIntentHandlerABI,
+    functionName: "hashPaymentIntent",
+    args: [intent.intent]
+  });
+
+  return encodePacked(
+    [
+      "address",
+      "bytes32",
+      "bytes32",
+    ],
+    [
+      PAYMENT_INTENT_HANDLER_ADDRESS,
+      orderId as `0x${string}`,
+      hash as `0x${string}`,
+    ]
+  );
+}
+```
+
+The target should always be the deployment of the `PaymentIntentHandler` on Base. Make sure the encoding is packed so save bytespace. 
+
+This contract can either be called directly if the user is burning USDC on an evm chain, or can be used as the callback to `SwapRouter02Wrapper`
+
+## SwapRouter02Wrapper
+Calls Uniswap's SwapRouter02 to swap ETH / ERC20 tokens to USDC. The callback hook can either be a direct call to `PaymentIntentHandler` if on Base, or `CCTPBurnHookWrapper` if on another EVM chain.
+
+```solidity
+
+enum Hook { Burn, PaymentHandler }
+
+struct RouteParams {
+    address tokenIn; // zero = ETH
+    address tokenOut; // zero = ETH
+    uint256 amountInMax;
+    uint256 amountOut;
+    uint256 deadline;
+    bytes[] swapCalls; // full bytes[] from off-chain quoting
+    Hook hook;
+    bytes structData; // opaque context for ISwapTarget hook
+}
+
+function executeSwap(RouteParams calldata p) external payable nonReentrant
+```
+
+The `tokenIn` should be the token we are going to swap out of. If it is the native token on the chain, should be the zero address. `tokenOut` should always be USDC to work with the callbacks. `amountInMax` is the maximum amount with slippage we are willing to swap from the `tokenIn`. `amountOut` should always match the `intent.amount`.
+
+`deadline` and `swapCalls` come from Uniswap SwapRouter02 implementation where we get the actual swap calldata
+
+`hook` can be either `Burn` or `PaymentHandler` and directly calls those implementations (already a part of the constructor). This is so arbitrary calls cannot be used maliciously.
+
+The `_structData` should be encoded based on the target hook. 
+- If we are using `PaymentIntentHandler`, we are using `SwapRouter02Wrapper` on Base, so the data should be encoded as mentioned [above](#encodeintentdata). 
+- If we are using `CCTPBurnHookWrapper` we should encode the data as mentioned [above](#encodeorderdata)
+  

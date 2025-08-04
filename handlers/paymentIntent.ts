@@ -14,6 +14,7 @@ export function formatSalt(salt: BigInt): Bytes {
 export function handlePaymentIntentSuccess(event: PaymentIntentSuccess): void {
   const intentFulfillment = new IntentFulfillment(event.transaction.hash.concatI32(event.logIndex.toI32()).toHex());
 
+  intentFulfillment.target = event.address;
   intentFulfillment.amount = event.params.intent.amount;
   intentFulfillment.orderId = event.params.orderId;
   intentFulfillment.salt = formatSalt(event.params.intent.salt);

@@ -1,3 +1,6 @@
 {
-  "SwapRouter02Wrapper#SwapRouter02Wrapper": "0x1e531822559aa9491299b2B4c3789b99f7B5A93C"
+  "SwapRouter02Wrapper#SwapRouter02Wrapper": "0x1e531822559aa9491299b2B4c3789b99f7B5A93C",
+  "CCTPMintHookWrapper#CCTPMintHookWrapper": "0x0F05cc9bDB2F08DB1bdd8EcB123a83586FA4A0B7",
+  "PaymentIntentHandler#PaymentIntentHandler": "0x49f9CcFecB36f5d3f422303A0eFFfC7A6f857C9A",
+  "SwapRouter02WrapperBase#SwapRouter02Wrapper": "0xe72fAA515370904E5f62E4a8592eDAB1988A568f"
 }

@@ -1,5 +1,6 @@
 type IntentFulfillment @entity {
   id: ID!
+  target: Bytes!
   orderId: Bytes!
   amount: BigInt!
   salt: Bytes!

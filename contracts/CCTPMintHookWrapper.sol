@@ -39,7 +39,11 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         bytes32 intentHash;
     }
 
+    // Address for the recovery wallet
+    address public recoveryWallet;
+
     // ============ Constants ============
+
     // Address of the local message transmitter
     IReceiverV2 public immutable MESSAGE_TRANSMITTER;
     IERC20 public immutable USDC;
@@ -88,6 +92,10 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         _setupRole(RELAYER_ROLE, msg.sender);
     }
 
+    function setRecoveryWallet(address _recoveryWallet) external onlyAdmin {
+        recoveryWallet = _recoveryWallet;
+    }
+
     /// @notice Save the relay message
     /// @dev This is used to save the relay message for recovery purposes
     /// @dev Funds will be sent to the recovery address
@@ -95,11 +103,9 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
     /// @dev ONLY CALL IF INTENT IS FAILING TO EXECUTE
     /// @param message The message to save
     /// @param attestation The attestation to save
-    /// @param recoveryAddress The recovery address to save
     function saveRelay(
         bytes calldata message,
-        bytes calldata attestation,
-        address recoveryAddress
+        bytes calldata attestation
     ) external virtual nonReentrant onlyRelayer {
         (
             bytes29 _msg,
@@ -113,7 +119,7 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
         // we can only recover the USDC if the mint recipient is the wrapper
         if (mintRecipient == address(this)) {
             USDC.safeTransfer(
-                recoveryAddress,
+                recoveryWallet,
                 _fields.amount - _fields.feeExecuted
             );
         }
@@ -277,6 +283,14 @@ contract CCTPMintHookWrapper is AccessControl, ReentrancyGuard {
             orderId: orderId,
             intentHash: intentHash
         });
+    }
+
+    modifier onlyAdmin() {
+        require(
+            hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Only admin"
+        );
+        _;
     }
 
     modifier onlyRelayer() {

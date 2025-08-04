@@ -40,14 +40,19 @@ flowchart BT
 ## Deployments
 
 ### PaymentIntentHandler
+
+The new `PaymentIntentHandler` and `CCTPMintHookHandler` was launched on 04 Aug 2025 to fix the `saveRelay` function in the `CCTPMintHookHandler`. These are the (new) deployments. The (old) deployments are still indexed by the graph, but all payment intents after 04 Aug 2025 are routed through the new deployments.
+
 | Network Name | Network ID | Contract Address                           |
 | ------------ | ---------- | ------------------------------------------ |
-| Base         | 8453       | 0x7981CC5C755a6E3E5aA021fB43F29d4336245253 |
+| Base         | 8453       | (old) 0x7981CC5C755a6E3E5aA021fB43F29d4336245253 |
+| Base         | 8453       | (new) 0x49f9CcFecB36f5d3f422303A0eFFfC7A6f857C9A |
 
 ### CCTPMintHookWrapper
 | Network Name | Network ID | Contract Address                           |
 | ------------ | ---------- | ------------------------------------------ |
-| Base         | 8453       | 0x87A44CFD1FFAC94bb8847B55Cf5C94Ee2d6485D9 |
+| Base         | 8453       | (old) 0x87A44CFD1FFAC94bb8847B55Cf5C94Ee2d6485D9 |
+| Base         | 8453       | (new) 0x0F05cc9bDB2F08DB1bdd8EcB123a83586FA4A0B7 |
 
 ### CCTPBurnHookWrapper
 | Network Name | Network ID | Contract Address                           |
@@ -62,7 +67,7 @@ flowchart BT
 ### SwapRouter02Wrapper
 | Network Name | Network ID | Contract Address                           |
 | ------------ | ---------- | ------------------------------------------ |
-| Base         | 8453       | 0x1e531822559aa9491299b2B4c3789b99f7B5A93C |
+| Base         | 8453       | 0xe72fAA515370904E5f62E4a8592eDAB1988A568f |
 | Ethereum     | 1          | 0x80Cd7c04331cDc01a85Ed8F10934d3Bc97E8AEeA |
 | Optimism     | 10         | 0x4fBE6aD66294BDA3745210E78e689D9EfE95Ba2c |
 | Polygon      | 137        | 0xEe19aa631BACF93a5fc602d61add3E90b4c00B31 |
@@ -122,7 +127,7 @@ const signature = await client.signTypedData({
     name: "PaymentIntentHandler",
     version: "1",
     chainId: BASE_CHAIN_ID, // 8453
-    verifyingContract: PAYMENT_INTENT_HANDLER_ADDRESS, // 0x7981CC5C755a6E3E5aA021fB43F29d4336245253
+    verifyingContract: PAYMENT_INTENT_HANDLER_ADDRESS, // 0x49f9CcFecB36f5d3f422303A0eFFfC7A6f857C9A
   },
   types: {
     PaymentIntent: [
@@ -399,6 +404,8 @@ The `_structData` should be encoded based on the target hook.
 - If we are using `CCTPBurnHookWrapper` we should encode the data as mentioned [above](#encodeorderdata)
 
 # Subgraphs
+
+The most recent subgraph version is 0.0.12, next version should be 0.0.13. The newest subgraph maintains indexing against the old and new payment intent handlers.
 
 The subgraphs for the `PaymentIntentHandler` and the `SafeTransferRouter` are deployed on Alchemy. The [playground](https://subgraph.satsuma-prod.com/skillet/kettle-pay/playground) can be accessed here.
 

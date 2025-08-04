@@ -4,14 +4,23 @@ import { toUtf8Bytes, keccak256 } from "ethers";
 const CCTPMintHookWrapper = buildModule("CCTPMintHookWrapper", (m) => {
   const usdc = m.getParameter("usdc");
   const messageTransmitter = m.getParameter("messageTransmitter");
+  const recoveryWallet = m.getParameter("recoveryWallet");
+  const privyRelayer = m.getParameter("privyRelayer");
+  const privy7702Relayer = m.getParameter("privy7702Relayer");
 
-  const cctpMintHookWrapper = m.contract("CCTPMintHookWrapper", [usdc, messageTransmitter]);
+  const cctpMintHookWrapper = m.contract("CCTPMintHookWrapper", [
+    usdc, 
+    messageTransmitter
+  ]);
 
   const RELAYER_ROLE = keccak256(toUtf8Bytes("RELAYER_ROLE")); 
 
-  // privy smart wallet
-  m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, "0x6aE9B7217D4BC8fAECfb9DD18B655bd26f71427d"], { id: "cctp_hook_wrapper_set_relayer_1" });
-  m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, "0x675419b5E0B3C2b32522E27b8C3EBF9592AfDF59"], { id: "cctp_hook_wrapper_set_relayer_2" });
+  // privy smart wallet as relayer
+  m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, privyRelayer], { id: "cctp_hook_wrapper_set_relayer" });
+
+  m.call(cctpMintHookWrapper, "setRecoveryWallet", [recoveryWallet], { id: "cctp_hook_wrapper_set_recovery_wallet" });
+
+  m.call(cctpMintHookWrapper, "grantRole", [RELAYER_ROLE, privy7702Relayer], { id: "cctp_hook_wrapper_set_relayer_7702" });
 
   return { cctpMintHookWrapper };
 });

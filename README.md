@@ -83,27 +83,92 @@ flowchart BT
 
 
 ## PaymentIntentHandler
-Below are the core entry points for processing payment intents on Base
+
+
+### Structs and Data
+
+The `PaymentIntent` must be structured and signed properly in order to fulfill against the `PaymentIntentHandler`. Below are the structures and enumerators for the `PaymentIntent`.
+
+```solidity
+enum QuantityType { 
+  FIXED,              // checks quantity remaining on each fulfillment
+  UNLIMITED           // no check on amount for a given fulfillment
+}
+
+enum SignerType { 
+  MERCHANT,           // the merchant in payment intent must be signer
+  OPERATOR            // whitelisted operator signs on behalf of merchant
+}
+
+struct PaymentIntent {
+  uint256 amount;             // gross amount must 
+  uint256 feeBps;             // out of 10_000
+  address feeRecipient;       // address to receive the fee
+  address merchant;           // merchant to receive net amount
+  uint256 salt;               // unique identifier for the intent
+  QuantityType quantityType;  // fixed or unlimited
+  uint256 quantity;           // any number (ignored if unlimited)
+  SignerType signerType;      // merchant or operator
+  address signer;             // merchant or operator
+  uint256 nonce;              // version of this intent (for updates)
+}
+```
+
+We should always sign the `PaymentIntent` struct like this:
+
+```ts
+const signature = await client.signTypedData({
+  domain: {
+    name: "PaymentIntentHandler",
+    version: "1",
+    chainId: BASE_CHAIN_ID, // 8453
+    verifyingContract: PAYMENT_INTENT_HANDLER_ADDRESS, // 0x7981CC5C755a6E3E5aA021fB43F29d4336245253
+  },
+  types: {
+    PaymentIntent: [
+      { name: "amount", type: "uint256" },
+      { name: "feeBps", type: "uint256" },
+      { name: "feeRecipient", type: "address" },
+      { name: "merchant", type: "address" },
+      { name: "salt", type: "uint256" },
+      { name: "quantityType", type: "uint8" },
+      { name: "quantity", type: "uint256" },
+      { name: "signerType", type: "uint8" },
+      { name: "signer", type: "address" },
+      { name: "nonce", type: "uint256" },
+    ],
+  },
+  primaryType: "PaymentIntent",
+
+  // @ts-ignore - Does not like string type, but client cannot sign with bigint
+  message: intent,
+  account: client.account,
+});
+```
+
+This contract has the ability to update a given payment intent. This should be used if the user sets a `QuantityType.FIXED` and wants to update the amount. All the user needs to do is sign a message with the same `salt`, update all other fields, and increment the `nonce`. This will most likely not be used for one-off intents, but can be used if feeling fancy.
+
+Below are the core entry points for processing payment intents on Base.
 
 1. `fulfillIntent`
 
-Directly fulfills a payment intent by pulling USDC from `msg.sender` and distributing it to merchant and fee recipient.
+    Directly fulfills a payment intent by pulling USDC from `msg.sender` and distributing it to merchant and fee recipient.
 
-```solidity
-function fulfillIntent(
-    bytes32 _orderId,
-    PaymentIntent memory _intent,
-    bytes memory _signature
-) external nonReentrant returns (bool) {
-    return _fulfillIntent(
-        bytes32(0),     // no external consumption nonce
-        0,              // no external fee
-        _orderId,
-        _intent,
-        _signature
-    );
-}
-```
+      ```solidity
+      function fulfillIntent(
+          bytes32 _orderId,
+          PaymentIntent memory _intent,
+          bytes memory _signature
+      ) external nonReentrant returns (bool) {
+          return _fulfillIntent(
+              bytes32(0),     // no external consumption nonce
+              0,              // no external fee
+              _orderId,
+              _intent,
+              _signature
+          );
+      }
+      ```
 
 2. `executeSwapHook`
 

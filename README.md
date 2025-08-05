@@ -20,21 +20,34 @@ config:
   layout: dagre
 ---
 flowchart BT
-    n2["CCTPMintHookWrapper"] --> n1["PaymentIntentHandler"]
-    n3["SwapRouter02Wrapper"] --> n4["CCTPBurnHookWrapper"]
-    n4 -.-> n5["Circle Iris Attestation<br>Poll api with txn hash and chainId"]
+    n2["CCTPMintHookWrapper<br>#relayIntent"] --> n11["#executePaymentHook"]
+    n3@{ label: "SwapRouter02Wrapper<br>#<span style=\"color:\">executeSwap</span>" } --> n4@{ label: "CCTPBurnHookWrapper<br>#<span style=\"color:\">executeSwapHook</span>" }
+    n4 -.-> n5@{ label: "Circle Iris Attestation<br>Poll api with txn hash and chainId<br>${IRIS_API_URL}<span style=\"color:\">/v2/messages/${DOMAIN}</span>" }
     n5 -.-> n2
-    n6(("USDC<br>on Base")) --> n1
+    n6(("USDC<br>on Base")) --> n13["#fulfillIntent"]
     n7(("ETH / ERC20<br>on EVM")) --> n3
     n8(("USDC<br>on EVM")) --> n4
-    n9["SwapRouter02Wrapper"] --> n1
+    n9["SwapRouter02Wrapper<br>#executeSwap"] --> n12["#executeSwapHook"]
     n10(("Eth/ERC20<br>on Base")) --> n9
+    n11 --> n1["PaymentIntentHandler"]
+    n12 --> n1
+    n13 --> n1
+    n14(("USDC<br>on Solana")) --> n15["Cirlce CCTP Token Messenger"]
+    n15 --> n16["order-event-program<br>emits event"]
+    n17(("Solana / SPL<br>on Solana")) --> n18["Jupiter Agg"]
+    n18 --> n15
+    n16 -.-> n5
     n2@{ shape: rounded}
-    n1@{ shape: rounded}
+    n11@{ shape: trap-b}
     n3@{ shape: rounded}
     n4@{ shape: rounded}
     n5@{ shape: card}
+    n13@{ shape: trap-b}
     n9@{ shape: rounded}
+    n12@{ shape: trap-b}
+    n1@{ shape: rounded}
+    n15@{ shape: rounded}
+    n18@{ shape: rounded}
 ```
 
 ## Deployments

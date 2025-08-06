@@ -2,6 +2,9 @@
 
 ```sh
 git clone git@github.com:Skillet-Capital/kettle-pay-contracts.git
+
+cd kettle-pay-contracts
+
 git submodule update --init --recursive
 ```
 

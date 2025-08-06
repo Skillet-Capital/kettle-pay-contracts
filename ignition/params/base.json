@@ -7,6 +7,7 @@
   "SwapRouter02WrapperBase": {
     "swapRouter": "0x2626664c2603336E57B271c5C0b26F421741e481",
     "burnHook": "0x0000000000000000000000000000000000000000",
+    "paymentHandler": "0x49f9CcFecB36f5d3f422303A0eFFfC7A6f857C9A"
   },
   "CCTPBurnHookWrapper": {
     "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"

@@ -56,14 +56,14 @@ flowchart BT
 
 The new `PaymentIntentHandler` and `CCTPMintHookHandler` was launched on 04 Aug 2025 to fix the `saveRelay` function in the `CCTPMintHookHandler`. These are the (new) deployments. The (old) deployments are still indexed by the graph, but all payment intents after 04 Aug 2025 are routed through the new deployments.
 
-| Network Name | Network ID | Contract Address                           |
-| ------------ | ---------- | ------------------------------------------ |
+| Network Name | Network ID | Contract Address                                 |
+| ------------ | ---------- | ------------------------------------------------ |
 | Base         | 8453       | (old) 0x7981CC5C755a6E3E5aA021fB43F29d4336245253 |
 | Base         | 8453       | (new) 0x49f9CcFecB36f5d3f422303A0eFFfC7A6f857C9A |
 
 ### CCTPMintHookWrapper
-| Network Name | Network ID | Contract Address                           |
-| ------------ | ---------- | ------------------------------------------ |
+| Network Name | Network ID | Contract Address                                 |
+| ------------ | ---------- | ------------------------------------------------ |
 | Base         | 8453       | (old) 0x87A44CFD1FFAC94bb8847B55Cf5C94Ee2d6485D9 |
 | Base         | 8453       | (new) 0x0F05cc9bDB2F08DB1bdd8EcB123a83586FA4A0B7 |
 
@@ -453,3 +453,65 @@ query SafeTransfers($wallet: String) {
   }
 }
 ```
+
+# Adding support for a new Blockchain
+In order to add support for a new blockchain, we need to deploy a `SwapRouter02Wrapper` and a `CCTPBurnHookWrapper` on that chain. In order for this chain to be supported for CCTP, it must be listed [here](https://developers.circle.com/cctp/cctp-supported-blockchains) under the CCTP V2 tab.
+
+For the following example, we are going to add support for Unichain. Unichain is supported on CCTP, but nobody uses it, so it will work for our example.
+
+1. We need to add an RPC URL to the `hardhat.config.ts` for Unichain. Go to Quicknode and get an RPC URL and add it to the config like this
+
+    ```ts
+      networks: {
+        ...
+        unichain: {
+          url: process.env.UNICHAIN_RPC_URL,
+          accounts: [process.env.PRIVATE_KEY!],
+        },
+      }
+    ```
+
+2. Create the params file in ignition
+   ```sh
+   touch ignition/params/unichain.json
+   ```
+
+3. Fill in the params for the `CCTPBurnHookWrapper`. Go [here](https://developers.circle.com/cctp/evm-smart-contracts) to get the deployment address on CCTP V2 for the `TokenMessengerV2`
+     ```json
+     {
+       "CCTPBurnHookWrapper": {
+         "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+       }
+     }
+     ```
+
+4. Deploy the CCTPBurnHookWrapper
+    ```sh
+    npx hardhat ignition deploy ignition/modules/cctp/CCTPBurnHookWrapper.ts --params ignition/params/unichain.json --network unichain
+    ```
+
+5. You will get the deployment address of the `CCTPBurnHookWrapper` on unichain. Now, we need to add params to `ignition/params/unichain.json`. We need to go to [here](https://docs.uniswap.org/contracts/v3/reference/deployments/) and find [unichain](https://docs.uniswap.org/contracts/v3/reference/deployments/unichain-deployments). Find the `SwapRouter02` deployment on the mainnet, not testnet.
+    ```json
+        {
+          "CCTPBurnHookWrapper": {
+            "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+          },
+          "SwapRouter02Wrapper": {
+            "swapRouter": "0x73855d06de49d0fe4a9c42636ba96c62da12ff9c",
+            "burnHook": "CCTP_BURN_HOOK_WRAPPER_ADDRESS", // fill in with deployment address
+            "paymentHandler": "0x0000000000000000000000000000000000000000"
+          },
+        }
+     ```
+
+6. Deploy the `SwapRouter02Wrapper`
+      ```sh
+    npx hardhat ignition deploy ignition/modules/wrapper/SwapRouter02Wrapper.ts --params ignition/params/unichain.json --network unichain
+    ```
+
+7. Now we have the deployment address for `CCTPBurnHookWrapper` and `SwapRouter02Wrapper`. Update this readme with those deployments so we don't lose track of them. Add the deployments to the `kettle-pay/src/lib/cctp/config/chains`. They will now work to burn and swap and burn any coin to Base. We need to update the `DESTINATION_DOMAINS` from Circle to get the correct domain for Unichain (even though it's a source, still fill in destination domain because this is what CCTP maps chain id from). 
+
+8. Deploy a webhook, set the chain to unichain and copy one of the existing webhooks. Because we are depliying the same contract code to Unichain, the event will have the same ABI as the other chains, so all we need to do is change the listening address to the `CCTPBurnHookWrapper` deployment address. Also, update the `webhook/alchemy/burn-hook` to get the chain identifier sent from Alchemy and map to the correct chain id for unichain.
+
+
+

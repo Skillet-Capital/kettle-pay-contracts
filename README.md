@@ -1,3 +1,10 @@
+# Installation
+
+```sh
+git clone git@github.com:Skillet-Capital/kettle-pay-contracts.git
+git submodule update --init --recursive
+```
+
 # Kettle Pay Contracts
 Includes all contracts deployed on supported EVM chains and an event emitter on Solana. 
 

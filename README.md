@@ -492,16 +492,16 @@ For the following example, we are going to add support for Unichain. Unichain is
 
 5. You will get the deployment address of the `CCTPBurnHookWrapper` on unichain. Now, we need to add params to `ignition/params/unichain.json`. We need to go to [here](https://docs.uniswap.org/contracts/v3/reference/deployments/) and find [unichain](https://docs.uniswap.org/contracts/v3/reference/deployments/unichain-deployments). Find the `SwapRouter02` deployment on the mainnet, not testnet.
     ```ts
-        {
-          "CCTPBurnHookWrapper": {
-            "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
-          },
-          "SwapRouter02Wrapper": {
-            "swapRouter": "0x73855d06de49d0fe4a9c42636ba96c62da12ff9c", // found on uniswap docs
-            "burnHook": "CCTP_BURN_HOOK_WRAPPER_ADDRESS", // fill in with deployment address
-            "paymentHandler": "0x0000000000000000000000000000000000000000" // zero because not base
-          },
-        }
+     {
+       "CCTPBurnHookWrapper": {
+         "tokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d"
+       },
+       "SwapRouter02Wrapper": {
+         "swapRouter": "0x73855d06de49d0fe4a9c42636ba96c62da12ff9c", // found on uniswap docs
+         "burnHook": "CCTP_BURN_HOOK_WRAPPER_ADDRESS", // fill in with deployment address
+         "paymentHandler": "0x0000000000000000000000000000000000000000" // zero because not base
+       },
+     }
      ```
 
 6. Deploy the `SwapRouter02Wrapper`

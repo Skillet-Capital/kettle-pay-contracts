@@ -87,6 +87,7 @@ The new `PaymentIntentHandler` and `CCTPMintHookHandler` was launched on 04 Aug 
 | Polygon      | 137        | 0x42Eb885A93C1b5d32e73f50E232110Cd34b8478c |
 | Arbitrum     | 42161      | 0x42Eb885A93C1b5d32e73f50E232110Cd34b8478c |
 | Avalanche    | 43114      | 0x42Eb885A93C1b5d32e73f50E232110Cd34b8478c |
+| Unichain     | 130        | 0x42Eb885A93C1b5d32e73f50E232110Cd34b8478c |
 
 
 ### SwapRouter02Wrapper
@@ -98,6 +99,7 @@ The new `PaymentIntentHandler` and `CCTPMintHookHandler` was launched on 04 Aug 
 | Polygon      | 137        | 0xEe19aa631BACF93a5fc602d61add3E90b4c00B31 |
 | Arbitrum     | 42161      | 0x923e1a9b0c1bF9Fb94695703F705245269e2d3Fa |
 | Avalanche    | 43114      | 0x923e1a9b0c1bF9Fb94695703F705245269e2d3Fa |
+| Unichain     | 130        | 0x410f4331b7Fd548844EA076A9B91FD131C56FCA2 |
 
 ### SafeTransferRouter
 | Network Name | Network ID | Contract Address                           |

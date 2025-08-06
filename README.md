@@ -485,9 +485,9 @@ For the following example, we are going to add support for Unichain. Unichain is
      }
      ```
 
-4. Deploy the CCTPBurnHookWrapper
+4. Deploy the CCTPBurnHookWrapper. Before we can deploy, we need to make sure we have enough gas token on Unichain. Ask Sean to help fund, or go to relay.link
     ```sh
-    npx hardhat ignition deploy ignition/modules/cctp/CCTPBurnHookWrapper.ts --params ignition/params/unichain.json --network unichain
+    npx hardhat ignition deploy ignition/modules/cctp/CCTPBurnHookWrapper.ts --parameters ignition/params/unichain.json --network unichain
     ```
 
 5. You will get the deployment address of the `CCTPBurnHookWrapper` on unichain. Now, we need to add params to `ignition/params/unichain.json`. We need to go to [here](https://docs.uniswap.org/contracts/v3/reference/deployments/) and find [unichain](https://docs.uniswap.org/contracts/v3/reference/deployments/unichain-deployments). Find the `SwapRouter02` deployment on the mainnet, not testnet.
@@ -506,7 +506,7 @@ For the following example, we are going to add support for Unichain. Unichain is
 
 6. Deploy the `SwapRouter02Wrapper`
       ```sh
-    npx hardhat ignition deploy ignition/modules/wrapper/SwapRouter02Wrapper.ts --params ignition/params/unichain.json --network unichain
+    npx hardhat ignition deploy ignition/modules/wrapper/SwapRouter02Wrapper.ts --parameters ignition/params/unichain.json --network unichain
     ```
 
 7. Now we have the deployment address for `CCTPBurnHookWrapper` and `SwapRouter02Wrapper`. Update this readme with those deployments so we don't lose track of them. Add the deployments to the `kettle-pay/src/lib/cctp/config/chains`. They will now work to burn and swap and burn any coin to Base. We need to update the `DESTINATION_DOMAINS` from Circle to get the correct domain for Unichain (even though it's a source, still fill in destination domain because this is what CCTP maps chain id from). 
